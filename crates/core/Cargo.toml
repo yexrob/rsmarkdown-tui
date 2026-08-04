@@ -9,3 +9,8 @@ description = "Streaming markdown core: normalize -> preprocess -> block split -
 pulldown-cmark = { workspace = true }
 
 [dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "stream"
+harness = false

@@ -11,8 +11,12 @@ pub struct PreprocessOptions {
 
 /// CRLF -> LF, trim trailing whitespace.
 fn proprocess_content(content: &str) -> String {
-    let no_cr = content.replace("\r\n", "\n").replace('\r', "\n");
-    no_cr.trim_end().to_string()
+    if content.contains('\r') {
+        let no_cr = content.replace("\r\n", "\n").replace('\r', "\n");
+        no_cr.trim_end().to_string()
+    } else {
+        content.trim_end().to_string()
+    }
 }
 
 const CODE_BLOCK_PLACEHOLDER: &str = "CODE_BLOCK_PLACEHOLDER";
@@ -23,6 +27,10 @@ const DOLLAR_PLACEHOLDER: &str = "_TMP_REPLACE_DOLLAR_";
 /// `/\\\((.*?)\\\)/` -> `$$...$$` (paren math)
 /// `/(^|[^\\])\$(.+?)\$/` -> `$1$$$2$` (dollar math)
 pub fn preprocess_latex(content: &str) -> String {
+    // fast path: nothing to rewrite when no LaTeX markers or dollars are present
+    if !content.contains(['$', '\\']) {
+        return content.to_string();
+    }
     let code_blocks: Vec<&str> = {
         let mut blocks = Vec::new();
         let ranges = crate::scan::find_closed_code_block_ranges(content);
@@ -31,6 +39,14 @@ pub fn preprocess_latex(content: &str) -> String {
         }
         blocks
     };
+    if code_blocks.is_empty() {
+        let mut p = content.to_string();
+        p = replace_bracket_math(&p, false);
+        p = replace_bracket_math(&p, true);
+        p = replace_paren_math(&p);
+        p = replace_dollar_math(&p);
+        return p;
+    }
     let mut processed = {
         let ranges = crate::scan::find_closed_code_block_ranges(content);
         let mut out = String::with_capacity(content.len());
@@ -49,13 +65,19 @@ pub fn preprocess_latex(content: &str) -> String {
     processed = replace_paren_math(&processed);
     processed = replace_dollar_math(&processed);
 
-    for block in code_blocks {
-        // escape `$` inside code blocks
-        let escaped = block.replace('$', DOLLAR_PLACEHOLDER);
-        processed = processed.replacen(CODE_BLOCK_PLACEHOLDER, &escaped, 1);
+    // restore code blocks in one pass (escaped `$` kept until the final unescape)
+    let mut restored = String::with_capacity(processed.len());
+    let mut ph_pos = 0;
+    let mut block_idx = 0;
+    while let Some(rel) = processed[ph_pos..].find(CODE_BLOCK_PLACEHOLDER) {
+        restored.push_str(&processed[ph_pos..ph_pos + rel]);
+        restored.push_str(&code_blocks[block_idx].replace('$', DOLLAR_PLACEHOLDER));
+        ph_pos += rel + CODE_BLOCK_PLACEHOLDER.len();
+        block_idx += 1;
     }
+    restored.push_str(&processed[ph_pos..]);
 
-    processed.replace(DOLLAR_PLACEHOLDER, "$")
+    restored.replace(DOLLAR_PLACEHOLDER, "$")
 }
 
 fn replace_bracket_math(content: &str, multiline: bool) -> String {
@@ -88,24 +110,23 @@ fn replace_bracket_math(content: &str, multiline: bool) -> String {
 fn replace_paren_math(content: &str) -> String {
     let mut out = String::with_capacity(content.len());
     let mut i = 0;
-    while i < content.len() {
-        let ch = content[i..].chars().next().expect("char at boundary");
-        if ch == '\\' && content[i + 1..].starts_with('(') {
-            let rest = &content[i + 2..];
-            if let Some(rel) = rest.find("\\)") {
-                let equation = &rest[..rel];
-                if !equation.contains('\n') {
-                    out.push_str("$$");
-                    out.push_str(equation);
-                    out.push_str("$$");
-                    i += 2 + equation.len() + 2;
-                    continue;
-                }
-            }
+    while let Some(rel) = content[i..].find("\\(") {
+        let open = i + rel;
+        let rest = &content[open + 2..];
+        let Some(close_rel) = rest.find("\\)") else {
+            break;
+        };
+        let equation = &rest[..close_rel];
+        if equation.contains('\n') {
+            break;
         }
-        out.push(ch);
-        i += ch.len_utf8();
+        out.push_str(&content[i..open]);
+        out.push_str("$$");
+        out.push_str(equation);
+        out.push_str("$$");
+        i = open + 2 + equation.len() + 2;
     }
+    out.push_str(&content[i..]);
     out
 }
 
@@ -118,30 +139,27 @@ fn replace_dollar_math(content: &str) -> String {
     let bytes = content.as_bytes();
     let mut out = String::with_capacity(content.len());
     let mut i = 0;
+    let mut span_start = 0;
     while i < bytes.len() {
         let prefix_ok = i == 0 || bytes[i - 1] != b'\\';
         let part_of_double = bytes.get(i + 1) == Some(&b'$') || (i > 0 && bytes[i - 1] == b'$');
         if bytes[i] == b'$' && prefix_ok && !part_of_double {
             if let Some(rel) = content[i + 1..].find('$') {
                 let equation = &content[i + 1..i + 1 + rel];
-                if equation.is_empty() || equation.contains('\n') {
+                if !equation.is_empty() && !equation.contains('\n') {
+                    out.push_str(&content[span_start..i]);
+                    out.push_str("$$");
+                    out.push_str(equation);
                     out.push('$');
-                    i += 1;
+                    i += 1 + rel + 1;
+                    span_start = i;
                     continue;
                 }
-                out.push_str("$$");
-                out.push_str(equation);
-                out.push('$');
-                i += 1 + rel + 1;
-                continue;
             }
         }
-        // bytes[i] == b'$' only holds at char boundaries (ASCII); multibyte
-        // lead/continuation bytes never equal '$'
-        let ch = content[i..].chars().next().expect("char at boundary");
-        out.push(ch);
-        i += ch.len_utf8();
+        i += 1;
     }
+    out.push_str(&content[span_start..]);
     out
 }
 

@@ -90,9 +90,36 @@ pub struct ProcessorOptions {
     pub preprocess: PreprocessOptions,
 }
 
+/// Cache effectiveness counters, exposed for benchmarks and status bars.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CacheStats {
+    /// Block parses satisfied from the LRU cache.
+    pub cache_hits: u64,
+    /// Block parses that actually ran the markdown parser.
+    pub fresh_parses: u64,
+}
+
+impl CacheStats {
+    pub fn hits(&self) -> u64 {
+        self.cache_hits
+    }
+    pub fn parses(&self) -> u64 {
+        self.cache_hits + self.fresh_parses
+    }
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.parses();
+        if total == 0 {
+            0.0
+        } else {
+            self.cache_hits as f64 / total as f64
+        }
+    }
+}
+
 pub struct MarkdownProcessor {
     options: ProcessorOptions,
     cache: AstCache,
+    stats: CacheStats,
 }
 
 impl Default for MarkdownProcessor {
@@ -106,6 +133,7 @@ impl MarkdownProcessor {
         Self {
             options,
             cache: AstCache::new(100),
+            stats: CacheStats::default(),
         }
     }
 
@@ -113,7 +141,13 @@ impl MarkdownProcessor {
         Self {
             options,
             cache: AstCache::new(cap),
+            stats: CacheStats::default(),
         }
+    }
+
+    /// Cache effectiveness since the processor was created.
+    pub fn cache_stats(&self) -> CacheStats {
+        self.stats
     }
 
     pub fn normalize(&self, content: &str) -> String {
@@ -134,10 +168,12 @@ impl MarkdownProcessor {
             return None;
         }
         if let Some(ast) = self.cache.get(content) {
+            self.stats.cache_hits += 1;
             return Some(ast);
         }
         let ast = parse_block(content);
         self.cache.insert(content.to_string(), ast.clone());
+        self.stats.fresh_parses += 1;
         Some(ast)
     }
 

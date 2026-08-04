@@ -28,5 +28,5 @@ pub mod scan;
 
 pub use ast::{Alignment, Ast, Block, Inline, ListItem};
 pub use preprocess::PreprocessOptions;
-pub use processor::{BlockResult, Document, MarkdownProcessor, Mode, ProcessorOptions};
+pub use processor::{BlockResult, CacheStats, Document, MarkdownProcessor, Mode, ProcessorOptions};
 pub use renderer::{NullRenderer, Renderer};

@@ -40,6 +40,9 @@ struct App {
     last_tick: Instant,
     blocks_rendered: usize,
     width_dirty: bool,
+    last_parse_us: u64,
+    cache_hits: u64,
+    last_content: String,
 }
 
 impl App {
@@ -56,6 +59,9 @@ impl App {
             last_tick: Instant::now(),
             blocks_rendered: 0,
             width_dirty: true,
+            last_parse_us: 0,
+            cache_hits: 0,
+            last_content: String::new(),
         }
     }
 
@@ -68,9 +74,33 @@ impl App {
     }
 
     fn refresh(&mut self) {
+        // skip the whole pipeline when the content did not change — the tick
+        // loop calls this 30x/s even while idle
+        if self.last_content == self.content {
+            return;
+        }
+        self.last_content.clone_from(&self.content);
+        let t = std::time::Instant::now();
         self.doc = self.processor.process(&self.content, Mode::Streaming);
+        self.last_parse_us = t.elapsed().as_micros() as u64;
         self.renderer.render(&self.doc);
         self.blocks_rendered = self.doc.blocks.len();
+        self.cache_hits = self.processor.cache_stats().hits();
+    }
+
+    /// Generate a ~200 KB stress document and load it instantly.
+    fn load_stress_doc(&mut self) {
+        let unit = include_str!("../demo.md");
+        let mut big = String::with_capacity(200 * 1024);
+        while big.len() < 200 * 1024 {
+            big.push_str(unit);
+        }
+        self.content = big;
+        self.demo_pos = DEMO_DOC.len(); // demo finished
+        self.typing = false;
+        self.auto_scroll = false;
+        self.scroll = 0;
+        self.refresh();
     }
 
     fn advance_demo(&mut self) {
@@ -185,6 +215,10 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
             app.auto_scroll = !app.auto_scroll;
             true
         }
+        KeyCode::Char('p') => {
+            app.load_stress_doc();
+            true
+        }
         KeyCode::Char('r') => {
             app.restart_demo();
             app.advance_demo();
@@ -262,18 +296,20 @@ fn draw(f: &mut Frame, app: &mut App) {
     let status = Line::from(vec![
         mode,
         Span::raw(format!(
-            " {}B {} blocks {} lines {}/{}  ",
+            " {}B {} blocks {} lines {}/{}  parse {}µs  cached {}  ",
             app.content.len(),
             app.blocks_rendered,
             app.total_lines(),
             scroll,
-            total
+            total,
+            app.last_parse_us,
+            app.cache_hits,
         )),
         Span::styled(
             if app.typing {
                 "[esc] stop  [d] demo  [q] quit"
             } else {
-                "[t] type  [d] demo  [j/k] scroll  [s] autoscroll  [q] quit"
+                "[t] type  [d] demo  [p] stress 200KB  [j/k] scroll  [s] autoscroll  [q] quit"
             },
             Style::default(),
         ),
