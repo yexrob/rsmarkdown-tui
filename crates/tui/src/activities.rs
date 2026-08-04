@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! ✓ bash cargo test -p rsmarkdown-core · 900ms     (collapsed)
-//! ─ thinking · 2.3s · checking imports ─           (expanded)
+//! ✻ understand for 2.3s                        (done)
 //!     checking the block splitter for fence states
 //!     the tail block is the only one that changes
 //! ```
@@ -84,9 +84,9 @@ pub enum ThinkingState {
     Done,
 }
 
-/// A reasoning block: `⠋ thinking · 1.4s` -> `─ thinking · 1.4s ─`.
+/// A reasoning block: `⠋ understand… (1.4s)` -> `✻ understand for 1.4s`.
 #[derive(Debug, Clone)]
-/// A reasoning block: `⠋ thinking · 1.4s` -> `─ thinking · 1.4s ─`.
+/// A reasoning block: `⠋ understand… (1.4s)` -> `✻ understand for 1.4s`.
 
 pub struct Thinking {
     /// Running or done.
@@ -577,31 +577,24 @@ fn diff_header(d: &Diff, theme: &Theme) -> Line<'static> {
 }
 
 fn thinking_header(t: &Thinking, spinner: char, theme: &Theme) -> Line<'static> {
-    let mut spans = Vec::new();
+    let _ = spinner; // Claude Code 用静态 ✻ 标记
     match t.state {
+        // 运行态（Claude Code: `✻ Choreographing… (4s · thinking with xhigh effort)`）
         ThinkingState::Running => {
-            spans.push(Span::styled(
-                format!("{} thinking", spinner),
+            let mut spans = vec![Span::styled(
+                format!("✻ {}…", t.stage),
                 theme.thinking(),
-            ));
+            )];
+            let stats = format!("{:.1}s · thinking", t.duration_ms as f64 / 1000.0);
+            spans.push(Span::styled(format!(" ({stats})"), theme.dim()));
+            Line::from(spans)
         }
-        ThinkingState::Done => {
-            spans.push(Span::styled("─ thinking", theme.thinking()));
-        }
+        // 完成态（Claude Code: `✻ Crunched for 25s`）
+        ThinkingState::Done => Line::from(vec![Span::styled(
+            format!("✻ {} for {:.1}s", t.stage, t.duration_ms as f64 / 1000.0),
+            theme.thinking(),
+        )]),
     }
-    let mut stats = format!("{:.1}s", t.duration_ms as f64 / 1000.0);
-    if let Some(tokens) = t.tokens {
-        stats.push_str(&format!(" · ↓ {tokens} tokens"));
-    }
-    spans.push(Span::styled(format!(" ({stats})"), theme.dim()));
-    if let Some(d) = &t.digest {
-        let d = crate::renderer::truncate(d, 60);
-        spans.push(Span::styled(format!(" · {}", d), theme.dim()));
-    }
-    if t.state == ThinkingState::Done {
-        spans.push(Span::styled(" ─", theme.thinking()));
-    }
-    Line::from(spans)
 }
 
 fn tool_header(t: &ToolCall, spinner: char, theme: &Theme) -> Line<'static> {
@@ -890,13 +883,13 @@ mod tests {
         let mut h = thinking("understand", ThinkingState::Done);
         assert!(h.expandable());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "─ thinking (2.3s) · checking imports ─");
+        assert_eq!(text(&lines[0]), "✻ understand for 2.3s");
         assert_eq!(lines.len(), 1, "collapsed: header only");
 
         h.toggle();
         assert!(h.is_expanded());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "─ thinking (2.3s) · checking imports ─");
+        assert_eq!(text(&lines[0]), "✻ understand for 2.3s");
         assert_eq!(lines.len(), 2, "expanded: header + content");
         assert!(text(&lines[1]).contains("reasoning line"));
 
@@ -909,7 +902,7 @@ mod tests {
         let h = thinking("understand", ThinkingState::Running);
         assert!(!h.expandable());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "⠋ thinking (2.3s)");
+        assert_eq!(text(&lines[0]), "✻ understand… (2.3s · thinking)");
     }
 
     #[test]
@@ -1143,7 +1136,7 @@ mod tests {
         );
         assert!(text(&lines[2]).starts_with("│  ⎿ "), "{}", text(&lines[2]));
         assert!(
-            text(&lines[3]).starts_with("└─ ─ thinking"),
+            text(&lines[3]).starts_with("└─ ✻ scan"),
             "{}",
             text(&lines[3])
         );
