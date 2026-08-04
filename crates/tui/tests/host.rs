@@ -42,9 +42,12 @@ fn setup() -> (App, Terminal<TestBackend>) {
     for _ in 0..300 {
         app.tick_components();
     }
-    // the demo turn raises the permission dialog at the end; dismiss it so
-    // the transcript is interactive again
+    // the demo turn raises the permission dialog at the end; dismiss it and
+    // finish the remaining phase (ticks are frozen while the dialog is open)
     app.route(Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)));
+    for _ in 0..200 {
+        app.tick_components();
+    }
     // tall terminal: the conversation fits without scrolling, so absolute
     // click rows map 1:1 to document rows
     let mut terminal = Terminal::new(TestBackend::new(160, 300)).expect("test backend");
@@ -60,17 +63,16 @@ fn host_routes_clicks_to_component() {
 
     let rows = buffer_text(terminal.backend().buffer());
     assert!(
-        rows.iter()
-            .any(|r| r.contains("[x] Understand the request")),
-        "todo expanded by default"
+        !rows.iter().any(|r| r.contains("… 5 done")),
+        "finished todo collapsed by default"
     );
-    // find the todo header row ("⠿ todo · n/5 tasks")
+    // find the todo header row ("todo · 5/5 tasks")
     let todo_row = rows
         .iter()
         .position(|r| r.contains("todo · "))
         .expect("todo header visible") as u16;
 
-    // click it through the host with absolute coordinates
+    // click it through the host with absolute coordinates to expand
     assert!(app.route(click(5, todo_row)), "click routed");
 
     terminal
@@ -78,10 +80,8 @@ fn host_routes_clicks_to_component() {
         .expect("redraw");
     let rows = buffer_text(terminal.backend().buffer());
     assert!(
-        !rows
-            .iter()
-            .any(|r| r.contains("[x] Understand the request")),
-        "todo collapsed by the click"
+        rows.iter().any(|r| r.contains("… 5 done")),
+        "todo priority view after the click"
     );
 }
 

@@ -223,12 +223,16 @@ impl SubAgent {
 }
 
 /// Whether an activity should be shown expanded while it is active:
-/// a todo with an in-progress item, or a running subagent.
+/// a running thinking / tool / subagent, or a todo with an in-progress
+/// item. Finished activities collapse back by default (the caller must
+/// clear [`Activity::auto_expanded`] to signal a user take-over).
 pub fn auto_expand(h: &Activity) -> bool {
     match &h.kind {
-        ActivityKind::Todo(t) => t.items.iter().any(|i| i.status == TodoStatus::InProgress),
+        ActivityKind::Thinking(t) => t.state == ThinkingState::Running,
+        ActivityKind::Tool(t) => t.status == ToolStatus::Running,
         ActivityKind::SubAgent(a) => a.status == SubAgentStatus::Running,
-        _ => false,
+        ActivityKind::Todo(t) => t.items.iter().any(|i| i.status == TodoStatus::InProgress),
+        ActivityKind::Diff(_) => false,
     }
 }
 
@@ -410,11 +414,13 @@ pub struct Activity {
     /// Which kind of activity.
     pub kind: ActivityKind,
     /// Collapsed (`false`) or expanded (`true`).
-    /// Collapsed (`false`) or expanded (`true`).
     pub expanded: bool,
     /// Full content revealed when expanded (reasoning text / tool I/O).
-    /// Content revealed when expanded (reasoning text / tool I/O / items).
     pub content: Vec<Line<'static>>,
+    /// Whether the current expansion came from the auto-expand rule (the
+    /// activity is still active) rather than a user click. When an activity
+    /// finishes, auto-expanded ones collapse back — user clicks win.
+    pub auto_expanded: bool,
 }
 
 impl Activity {
@@ -425,14 +431,15 @@ impl Activity {
             kind,
             expanded: false,
             content: Vec::new(),
+            auto_expanded: false,
         }
     }
 
-    /// Expand or collapse.
-    /// Expand or collapse.
-
+    /// Expand or collapse (a manual toggle takes over from the
+    /// auto-expand rule).
     pub fn toggle(&mut self) {
         self.expanded = !self.expanded;
+        self.auto_expanded = false;
     }
 
     /// Whether expansion reveals anything at all.
@@ -479,19 +486,44 @@ fn subagent_header(a: &SubAgent, spinner: char) -> Line<'static> {
     Line::from(spans)
 }
 
-/// Render a todo list as checklist items (expanded content of a Todo hint).
+/// Max todo items shown in the priority view (the active items window).
+pub const TODO_SHOWN: usize = 5;
+
+/// Render a todo list with priority folding: finished items collapse into
+/// a leading `… N done` line, the window shows the in-progress item plus
+/// the next unfinished ones (at most [`TODO_SHOWN`]), and anything further
+/// collapses into a trailing `… +N more` line. A todo with 20 items and 5
+/// done therefore shows: `… 5 done` + 5 active items + `… +10 more`.
 pub fn todo_lines(t: &TodoList, spinner: char) -> Vec<Line<'static>> {
     let mut out = Vec::new();
-    for item in &t.items {
+    let done = t.done();
+    if done > 0 {
+        out.push(Line::from(vec![Span::styled(
+            format!("… {} done", done),
+            theme::dim(),
+        )]));
+    }
+    let active: Vec<&TodoItem> = t
+        .items
+        .iter()
+        .filter(|i| i.status != TodoStatus::Done)
+        .collect();
+    for item in active.iter().take(TODO_SHOWN) {
         let (marker, style) = match item.status {
             TodoStatus::Pending => (format!("[ ] "), theme::task_open()),
             TodoStatus::InProgress => (format!("[{}] ", spinner), theme::tool_running()),
-            TodoStatus::Done => ("[x] ".to_string(), theme::task_done()),
+            TodoStatus::Done => unreachable!("filtered"),
         };
         out.push(Line::from(vec![
             Span::styled(marker, style),
             Span::styled(item.text.clone(), style),
         ]));
+    }
+    if active.len() > TODO_SHOWN {
+        out.push(Line::from(vec![Span::styled(
+            format!("… +{} more", active.len() - TODO_SHOWN),
+            theme::dim(),
+        )]));
     }
     out
 }
@@ -901,15 +933,66 @@ mod tests {
         assert_eq!(todo.done(), 1);
         assert_eq!(todo.total(), 3);
         let lines = todo_lines(&todo, '⠋');
-        assert!(text(&lines[0]).starts_with("[x] "));
-        assert!(text(&lines[1]).starts_with("[⠋] "));
-        assert!(text(&lines[2]).starts_with("[ ] "));
+        assert!(
+            text(&lines[0]).starts_with("… 1 done"),
+            "{}",
+            text(&lines[0])
+        );
+        assert!(text(&lines[1]).starts_with("[⠋] "), "{}", text(&lines[1]));
+        assert!(text(&lines[2]).starts_with("[ ] "), "{}", text(&lines[2]));
 
         todo.set(2, TodoStatus::Done);
         assert_eq!(todo.done(), 2);
 
         let header = todo_header(&todo, '⠋');
         assert!(text(&header).contains("2/3 tasks"), "{}", text(&header));
+    }
+
+    #[test]
+    fn todo_priority_folding() {
+        // 20 items, 5 done: leading ellipsis + 5 active + trailing tail
+        let items: Vec<TodoItem> = (0..20)
+            .map(|i| TodoItem {
+                text: format!("item {}", i),
+                status: if i < 5 {
+                    TodoStatus::Done
+                } else if i == 5 {
+                    TodoStatus::InProgress
+                } else {
+                    TodoStatus::Pending
+                },
+            })
+            .collect();
+        let todo = TodoList {
+            title: "Big".to_string(),
+            items,
+        };
+        let lines = todo_lines(&todo, '⠋');
+        assert_eq!(lines.len(), 7, "1 done + 5 active + 1 tail");
+        assert!(text(&lines[0]).starts_with("… 5 done"));
+        assert!(
+            text(&lines[1]).starts_with("[⠋] item 5"),
+            "in-progress first in window"
+        );
+        assert!(
+            text(&lines[5]).starts_with("[ ] item 9"),
+            "window capped at 5"
+        );
+        assert!(text(&lines[6]).starts_with("… +10 more"), "trailing tail");
+
+        // all done: only the leading ellipsis
+        let all_done = TodoList {
+            title: "All".to_string(),
+            items: (0..3)
+                .map(|i| TodoItem {
+                    text: format!("item {}", i),
+                    status: TodoStatus::Done,
+                })
+                .collect(),
+        };
+        let lines = todo_lines(&all_done, '⠋');
+        assert_eq!(lines.len(), 1);
+        assert!(text(&lines[0]).starts_with("… 3 done"));
     }
 
     #[test]

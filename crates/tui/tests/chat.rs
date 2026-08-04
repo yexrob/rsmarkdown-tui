@@ -192,31 +192,70 @@ fn clicks_on_plain_rows_do_nothing() {
 }
 
 #[test]
-#[test]
-fn todo_and_subagent_auto_expand() {
-    // while a todo/subagent is active they stay expanded; after the turn the
-    // expanded state is preserved, so items and nested work stay visible
+fn finished_activities_collapse_by_default() {
+    // active activities (running todo / subagent) stay expanded; once
+    // finished they collapse back — a click is required to reopen them
     let mut chat = AgentChat::new();
     for _ in 0..300 {
         chat.on_tick();
     }
     let text = chat.conversation_text();
     assert!(
-        text.contains("[x] Understand the request"),
-        "todo items visible:\n{text}"
+        text.contains("todo · 5/5 tasks"),
+        "todo header visible:\n{text}"
     );
     assert!(
-        text.contains("Report findings"),
-        "nested subagent todo visible:\n{text}"
+        !text.contains("[x] Understand the request"),
+        "finished todo items collapsed:\n{text}"
     );
     assert!(
-        text.contains("grep -n parse_markdown_into_blocks"),
-        "nested subagent tool visible:\n{text}"
+        !text.contains("… 5 done"),
+        "todo items not rendered while collapsed:\n{text}"
+    );
+    assert!(
+        !text.contains("Report findings"),
+        "finished subagent transcript collapsed:\n{text}"
+    );
+    assert!(
+        !text.contains("grep -n parse_markdown_into_blocks"),
+        "finished subagent nested tool collapsed:\n{text}"
+    );
+    // a click reopens the finished todo (row 0 is the user message)
+    let (_, _) = draw_chat(&mut chat);
+    let todo_row = chat
+        .hint_row_ranges()
+        .iter()
+        .find(|r| r.path == [0])
+        .map(|r| r.start)
+        .expect("todo row range");
+    assert!(chat.event(click(todo_row)), "click on todo header");
+    let text = chat.conversation_text();
+    assert!(
+        text.contains("… 5 done"),
+        "todo priority view after click:\n{text}"
     );
 }
 
 #[test]
-fn click_during_streaming_stays_expanded() {
+fn active_activities_auto_expand() {
+    // while a todo is in progress its items are visible
+    let mut chat = AgentChat::new();
+    for _ in 0..6 {
+        chat.on_tick();
+    }
+    let text = chat.conversation_text();
+    assert!(
+        text.contains("Understand the request") && text.contains("Explore the codebase"),
+        "in-progress todo window visible:\n{text}"
+    );
+    assert!(
+        !text.contains("… 1 done"),
+        "no fold when nothing is done yet:\n{text}"
+    );
+}
+
+#[test]
+fn click_during_streaming_stays_collapsed() {
     // regression: per-tick identity updates used to reset `expanded`
     let mut chat = AgentChat::new();
     // tick into the subagent phase (~ticks 44..80)
@@ -224,7 +263,7 @@ fn click_during_streaming_stays_expanded() {
         chat.on_tick();
     }
     let (_, _) = draw_chat(&mut chat);
-    // the subagent activity is auto-expanded while running
+    // the subagent activity is auto-expanded while running; a click folds it
     let sub_row = chat
         .hint_row_ranges()
         .iter()
@@ -238,14 +277,15 @@ fn click_during_streaming_stays_expanded() {
         .expect("subagent row");
     assert!(chat.event(click(sub_row)), "click consumed");
 
-    // keep ticking — the expansion must survive identity updates
+    // keep ticking — the user's collapse must survive identity updates
+    // (per-tick subagent updates used to reset `expanded`)
     for _ in 0..40 {
         chat.on_tick();
     }
     let text = chat.conversation_text();
     assert!(
-        text.contains("Report findings"),
-        "subagent nested work still expanded after streaming:\n{text}"
+        !text.contains("Report findings"),
+        "user collapse survives streaming:\n{text}"
     );
 }
 
@@ -256,8 +296,22 @@ fn nested_subagent_click() {
         chat.on_tick();
     }
     let (_, _) = draw_chat(&mut chat);
-    // nested activities are expanded while the subagent works; find the
-    // sub-grep tool (path [3, 2]) and collapse it with a click
+    // finished subagent is collapsed; click its header to open the nested
+    // transcript, then click a nested tool to fold just that one
+    let sub_row = chat
+        .hint_row_ranges()
+        .iter()
+        .find(|r| r.path.len() == 1 && r.path == [2])
+        .map(|r| r.start)
+        .expect("subagent row");
+    assert!(chat.event(click(sub_row)), "subagent header click");
+    let expanded = chat.conversation_text();
+    assert!(
+        expanded.contains("grep -n parse_markdown_into_blocks"),
+        "nested work visible after subagent click:\n{expanded}"
+    );
+    // the nested grep tool is collapsed (finished); click it to expand
+    let (_, _) = draw_chat(&mut chat);
     let grep_row = chat
         .hint_row_ranges()
         .iter()
@@ -265,17 +319,10 @@ fn nested_subagent_click() {
         .map(|r| r.start)
         .expect("nested grep tool row");
     assert!(chat.event(click(grep_row)), "nested click consumed");
-    let collapsed = chat.conversation_text();
-    assert!(
-        !collapsed.contains("blocks.rs:24: pub fn parse_markdown_into_blocks"),
-        "nested tool collapsed after click:\n{collapsed}"
-    );
-    // click again to re-expand
-    assert!(chat.event(click(grep_row)), "second nested click consumed");
     let text = chat.conversation_text();
     assert!(
         text.contains("blocks.rs:24: pub fn parse_markdown_into_blocks"),
-        "nested tool body after re-expand:\n{text}"
+        "nested tool body after click:\n{text}"
     );
 }
 

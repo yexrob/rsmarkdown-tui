@@ -424,16 +424,24 @@ impl AgentChat {
         };
         let id = hint.kind.identity();
         let mut hint = hint;
-        // while active (running todo / subagent) keep it expanded; otherwise
-        // preserve the user's expand/collapse choice across identity updates
+        // expansion policy: active activities (auto_expand) stay expanded;
+        // when one finishes it collapses back — unless the user clicked it
+        // open, in which case the manual choice survives identity updates
         hint.expanded = if crate::activities::auto_expand(&hint) {
+            hint.auto_expanded = true;
             true
         } else {
-            msg.hints
-                .iter()
-                .rev()
-                .find(|l| l.kind.identity() == id)
-                .map_or(false, |l| l.expanded)
+            let prev = msg.hints.iter().rev().find(|l| l.kind.identity() == id);
+            match prev {
+                Some(l) if l.expanded && !l.auto_expanded => {
+                    hint.auto_expanded = false;
+                    true
+                }
+                _ => {
+                    hint.auto_expanded = false;
+                    false
+                }
+            }
         };
         // replace the previous occurrence IN PLACE (single evolving todo,
         // running -> done updates) instead of appending duplicates
@@ -661,9 +669,11 @@ impl AgentChat {
                         String::new()
                     },
                 }));
-                // nested activities stay expanded while the agent works
+                // nested activities follow the same policy: active ones
+                // stay expanded, finished ones collapse
                 for act in &mut subagent_of(&mut hint).transcript {
-                    act.expanded = true;
+                    act.expanded = crate::activities::auto_expand(act);
+                    act.auto_expanded = act.expanded;
                 }
                 self.push_hint(hint);
 

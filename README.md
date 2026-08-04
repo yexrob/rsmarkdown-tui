@@ -188,6 +188,15 @@ any component publishes [`Component::agents`], every component receives the
 merged table via [`Component::absorb_agents`] — the demo chat feeds its
 subagents to the overview with no coupling.
 
+## Expand / collapse policy
+
+Activities auto-expand while active (running thinking / tool / subagent, a
+todo with an in-progress item) and **collapse back when finished** — a
+click reopens them, and a manual click survives subsequent updates. Todos
+render with priority folding: finished items collapse to a leading
+`… N done`, the window shows the in-progress + next unfinished items (at
+most 5), and the rest collapse to a trailing `… +N more`.
+
 ## Performance
 
 Two tools:
