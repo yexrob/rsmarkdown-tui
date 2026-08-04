@@ -237,20 +237,42 @@ fn finished_activities_collapse_by_default() {
 }
 
 #[test]
-fn active_activities_auto_expand() {
-    // while a todo is in progress its items are visible
+fn todo_is_an_ordinary_block() {
+    // a todo renders as one header row in the document flow (not pinned,
+    // not auto-expanded) even while it is in progress; details appear on
+    // click, and thinking auto-expands while running
     let mut chat = AgentChat::new();
     for _ in 0..6 {
         chat.on_tick();
     }
     let text = chat.conversation_text();
     assert!(
-        text.contains("Understand the request") && text.contains("Explore the codebase"),
-        "in-progress todo window visible:\n{text}"
+        text.contains("todo · 0/5 tasks"),
+        "todo header row:\n{text}"
     );
     assert!(
-        !text.contains("… 1 done"),
-        "no fold when nothing is done yet:\n{text}"
+        !text.contains("Explore the codebase"),
+        "todo items collapsed while in progress:\n{text}"
+    );
+    // running thinking is auto-expanded
+    assert!(
+        text.contains("Let me check how the pipeline is structured"),
+        "running thinking expanded:\n{text}"
+    );
+
+    // a click reveals the priority window
+    let (_, _) = draw_chat(&mut chat);
+    let todo_row = chat
+        .hint_row_ranges()
+        .iter()
+        .find(|r| r.path == [0])
+        .map(|r| r.start)
+        .expect("todo row range");
+    assert!(chat.event(click(todo_row)), "click todo header");
+    let text = chat.conversation_text();
+    assert!(
+        text.contains("Understand the request") && text.contains("Explore the codebase"),
+        "todo window after click:\n{text}"
     );
 }
 

@@ -222,17 +222,20 @@ impl SubAgent {
     }
 }
 
-/// Whether an activity should be shown expanded while it is active:
-/// a running thinking / tool / subagent, or a todo with an in-progress
-/// item. Finished activities collapse back by default (the caller must
-/// clear [`Activity::auto_expanded`] to signal a user take-over).
+/// Whether an activity should be shown expanded while it is active: a
+/// running thinking / tool / subagent. Finished activities collapse back
+/// by default (the caller must clear [`Activity::auto_expanded`] to signal
+/// a user take-over).
+///
+/// Plans (todo checklists) deliberately opt out: they render as ordinary
+/// blocks in the document flow and scroll away with the content — the
+/// details only appear when the user clicks the header.
 pub fn auto_expand(h: &Activity) -> bool {
     match &h.kind {
         ActivityKind::Thinking(t) => t.state == ThinkingState::Running,
         ActivityKind::Tool(t) => t.status == ToolStatus::Running,
         ActivityKind::SubAgent(a) => a.status == SubAgentStatus::Running,
-        ActivityKind::Todo(t) => t.items.iter().any(|i| i.status == TodoStatus::InProgress),
-        ActivityKind::Diff(_) => false,
+        ActivityKind::Todo(_) | ActivityKind::Diff(_) => false,
     }
 }
 
