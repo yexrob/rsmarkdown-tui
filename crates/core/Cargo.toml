@@ -1,0 +1,11 @@
+[package]
+name = "rsmarkdown-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Streaming markdown core: normalize -> preprocess -> block split -> incremental AST (core only, no terminal deps)"
+
+[dependencies]
+pulldown-cmark = { workspace = true }
+
+[dev-dependencies]

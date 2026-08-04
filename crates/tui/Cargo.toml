@@ -1,0 +1,12 @@
+[package]
+name = "rsmarkdown-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TUI display-layer adapter for rsmarkdown-core"
+
+[dependencies]
+rsmarkdown-core = { path = "../core" }
+ratatui = "0.30"
+crossterm = "0.29"
+unicode-width = { workspace = true }
