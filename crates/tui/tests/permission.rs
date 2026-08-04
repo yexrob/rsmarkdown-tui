@@ -184,11 +184,11 @@ fn overlay_background_separates_from_transcript() {
     app.ask(edit_request());
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");
     let rows = draw(&mut app, &mut terminal);
-    // modal: the component behind the dialog is not rendered at all (the
-    // status bar keeps the title, so only the content area must be empty)
+    // only the dialog's own rect is covered: the component content above
+    // it (probe draws at the top-left) still renders normally
     assert!(
-        !rows[..rows.len() - 1].iter().any(|r| r.contains("probe")),
-        "no content behind the modal dialog"
+        rows.iter().any(|r| r.contains("probe")),
+        "content outside the dialog rect still renders:\n{rows:?}"
     );
     let r = app.dialog_rect();
     // the bottom padding row of the dialog carries the solid overlay bg,

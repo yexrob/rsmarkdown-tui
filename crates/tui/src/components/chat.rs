@@ -970,22 +970,6 @@ impl Component for AgentChat {
         ]);
         buf.set_line(0, input_area.y, &input_line, input_area.width);
 
-        // floating overlays: the slash menu above the input, the help panel
-        // centered over the transcript
-        if let Some(menu) = &mut self.slash_menu {
-            self.menu_rect = menu.draw(input_area, buf);
-        } else {
-            self.menu_rect = Rect::default();
-        }
-        if self.help_open {
-            Self::demo_help().draw(area, buf);
-        }
-        if self.slash_menu.is_some() || self.help_open {
-            // overlay mode: the transcript is not rendered at all, so the
-            // command menu / help panel never blends with content behind it
-            return;
-        }
-
         let spinner = activities::spinner(self.tick);
 
         // pre-render every message into a flat row list, recording the
@@ -1043,6 +1027,17 @@ impl Component for AgentChat {
             .enumerate()
         {
             buf.set_line(0, chat_area.y + y as u16, line, chat_area.width);
+        }
+
+        // overlays paint after the transcript and erase their own rect
+        // first, so only the area they occupy is covered
+        if let Some(menu) = &mut self.slash_menu {
+            self.menu_rect = menu.draw(input_area, buf);
+        } else {
+            self.menu_rect = Rect::default();
+        }
+        if self.help_open {
+            Self::demo_help().draw(area, buf);
         }
     }
 

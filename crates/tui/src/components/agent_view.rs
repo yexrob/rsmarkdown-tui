@@ -25,6 +25,7 @@ use ratatui::widgets::{Block, Borders, Widget};
 use crate::agent::{fmt_age, merge_agents, Agent, AgentGroup, AgentStatus};
 use crate::app::FooterBadge;
 use crate::component::Component;
+use crate::permission::erase_overlay;
 use crate::renderer::theme;
 
 /// Completed rows above this count collapse to a `… N more` row.
@@ -418,6 +419,7 @@ impl AgentView {
             width: area.width,
             height,
         };
+        erase_overlay(buf, rect);
         let block = Block::default()
             .borders(Borders::ALL)
             .style(theme::overlay())
@@ -455,6 +457,7 @@ impl AgentView {
             width: area.width,
             height,
         };
+        erase_overlay(buf, rect);
         let block = Block::default()
             .borders(Borders::ALL)
             .style(theme::overlay())

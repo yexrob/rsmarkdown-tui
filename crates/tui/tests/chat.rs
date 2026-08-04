@@ -384,10 +384,19 @@ fn slash_in_empty_prompt_opens_command_menu() {
     assert_eq!(r.x, 0, "left-aligned with the prompt");
     assert_eq!(r.width, 100, "same width as the prompt line");
     assert_eq!(r.y + r.height, 199, "sits directly on the input line");
-    // overlay mode: the transcript is not rendered behind the menu
+    // the transcript still renders outside the menu rect; only the menu's
+    // own area is covered (solid overlay background)
     assert!(
-        !text.contains("todo · "),
-        "no transcript content behind the menu:\n{text}"
+        text.contains("todo · "),
+        "transcript above the menu still renders:\n{text}"
+    );
+    let (buf, _) = draw_chat(&mut chat);
+    let r = chat.menu_rect();
+    let cell = buf.cell((r.x + 5, r.y + 1)).expect("menu inner cell");
+    assert_eq!(
+        cell.bg,
+        ratatui::style::Color::Rgb(18, 18, 18),
+        "menu area covered with the overlay background"
     );
 }
 
@@ -459,8 +468,8 @@ fn question_mark_toggles_help_panel() {
     assert!(text.contains("Keyboard shortcuts"), "panel drawn");
     assert!(text.contains("send message"), "entry drawn");
     assert!(
-        !text.contains("todo · "),
-        "no transcript content behind the help panel:\n{text}"
+        text.contains("todo · "),
+        "transcript still renders outside the help panel:\n{text}"
     );
 
     // ? again closes it (toggle)

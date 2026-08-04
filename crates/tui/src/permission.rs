@@ -20,6 +20,15 @@ use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::renderer::theme;
 
+/// Erase `rect` with spaces on the overlay background, so whatever the
+/// component behind drew there does not bleed through the panel.
+pub fn erase_overlay(buf: &mut Buffer, rect: Rect) {
+    let fill = " ".repeat(rect.width as usize);
+    for y in rect.y..rect.y + rect.height {
+        buf.set_string(rect.x, y, &fill, theme::overlay());
+    }
+}
+
 /// Outcome of the dialog: an option was chosen, or it was dismissed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogAction {
@@ -205,6 +214,9 @@ impl PermissionDialog {
             height,
         };
 
+        // cover the panel's own area so content behind it does not show
+        // through; everything outside the rect keeps rendering normally
+        erase_overlay(buf, rect);
         let block = Block::default()
             .borders(Borders::ALL)
             .style(theme::overlay())

@@ -210,12 +210,8 @@ impl App {
             )
         };
         let badges = self.footer_badges();
-        if self.permission.is_none() {
-            // modal: while a permission dialog is open the component behind
-            // it is not rendered at all (nothing bleeds through the dialog)
-            let focused = &mut self.components[self.focused];
-            focused.draw(content_area, buf);
-        }
+        let focused = &mut self.components[self.focused];
+        focused.draw(content_area, buf);
 
         // status bar: focus index, title, badges (mode/agents/PR — most
         // important, first to survive narrow terminals), status, hints, keys

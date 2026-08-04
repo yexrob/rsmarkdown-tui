@@ -12,6 +12,7 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
 
+use crate::permission::erase_overlay;
 use crate::renderer::theme;
 
 /// One slash command (`/name` with a description).
@@ -151,6 +152,8 @@ impl SlashCommandMenu {
             width: area.width,
             height,
         };
+        // cover the menu's own area so the transcript does not show through
+        erase_overlay(buf, rect);
         let block = Block::default()
             .borders(Borders::ALL)
             .style(theme::overlay())
