@@ -43,7 +43,7 @@
 - [x] **① 层级符号 + 折叠摘要尾**:`⏺` 主活动圆点(Tool/SubAgent/Diff)、`⎿` 结果连接符(首行内容)、`├─/└─` 嵌套树枝 + `│` 延续、折叠摘要尾 `… +N lines (click to expand)` / `N steps (click to expand)` / diff `(click to expand)`
 - [x] **② Footer 徽标系统**:`SessionMode`(`⏵⏵ accept edits on` / `⏸ plan mode on`,`m` 循环)+ 组件贡献徽标(`Component::footer_badges`,chat 报 `← for agents`/`← 1 done`)+ `PR #446` 下划线颜色徽标;徽标优先于状态文本布局(窄终端先保徽标)
 - [x] **③ 权限确认框**:`PermissionRequest`/`PermissionDialog` 模态组件(宿主挂载,`App::ask` / 组件 `on_ask` 触发),编号选项 + `❯` 选中(方向键/数字/回车/双击),Esc 取消,标题/目标/提问/请求来源逐项对齐 v2.0.36 转录,内容复用 activity diff 渲染(上限 8 行 + `… +N more` 尾);测试 `tests/permission.rs`(8 项端到端)
-- [ ] ④ `/` 命令菜单 + `?` 帮助面板
+- [x] **④ `/` 命令菜单 + `?` 帮助面板**:`SlashCommandMenu`(空 prompt 输入 `/` 打开,前缀过滤 + `❯` 选中 + 滚动 + 鼠标单击选中/双击确认,Enter 执行,Esc 关闭,退格删掉 `/` 才收);`HelpPanel`(空 prompt `?` 展开/收起,分区键位列表 + 滚动,Esc 关闭);demo 中 `/clear` 清空转录、`/help` 打开面板;测试 `tests/command_menu.rs`(9 项)+ chat 集成 8 项
 - [ ] ⑤ Agent 总览屏
 - [ ] ⑥ 语义色 token 化
 

@@ -170,6 +170,14 @@ custom component with `+`/`-` interaction and a footer badge.
 
 `App::ask` (or a component's `on_ask`) raises a Claude Code style modal: numbered options with a `❯` selection marker, `Esc` to cancel, Enter / digit / double-click to confirm, and an optional pre-rendered content preview — the caller supplies styled lines, so the demo feeds it with the activity diff renderer (capped at 8 rows).
 
+## Command menu & help
+
+Typing `/` into an empty prompt opens a filterable command menu (arrow keys
+move, Enter confirms, Esc closes, mouse click selects / double-click
+confirms); `?` toggles a grouped keybinding panel. Both are reusable
+library pieces (`SlashCommandMenu`, `HelpPanel`); the demo wires `/clear`
+and `/help`.
+
 ## Performance
 
 Two tools:

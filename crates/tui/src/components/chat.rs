@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::{Event, KeyCode, KeyEventKind, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
@@ -20,7 +20,9 @@ use crate::activities::{
     self, activities_path_get_mut, Activity, ActivityKind, ActivityRowRange, Diff, SubAgent,
     SubAgentStatus, Thinking, ThinkingState, TodoItem, TodoList, TodoStatus, ToolCall, ToolStatus,
 };
+use crate::command_menu::{SlashCommand, SlashCommandMenu};
 use crate::component::Component;
+use crate::help::{HelpEntry, HelpPanel, HelpSection};
 use crate::permission::PermissionRequest;
 use crate::renderer::{theme, StreamMarkdownRenderer};
 
@@ -214,6 +216,12 @@ pub struct AgentChat {
     view_height: u16,
     /// Whether the demo permission request was raised this turn.
     asked: bool,
+    /// Open slash-command menu (`/` typed into an empty prompt), if any.
+    slash_menu: Option<SlashCommandMenu>,
+    /// Rect the menu was drawn into last frame (mouse translation).
+    menu_rect: Rect,
+    /// Whether the `?` help panel is open.
+    help_open: bool,
 }
 
 impl AgentChat {
@@ -234,9 +242,157 @@ impl AgentChat {
             activity_ranges: Vec::new(),
             view_height: 24,
             asked: false,
+            slash_menu: None,
+            menu_rect: Rect::default(),
+            help_open: false,
         };
         this.submit("What does the pipeline look like?");
         this
+    }
+
+    /// Whether the `?` help panel is open (tests).
+    pub fn help_open(&self) -> bool {
+        self.help_open
+    }
+
+    /// Whether the slash-command menu is open (tests).
+    pub fn menu_open(&self) -> bool {
+        self.slash_menu.is_some()
+    }
+
+    /// Rect the open menu was drawn into last frame (tests).
+    pub fn menu_rect(&self) -> Rect {
+        self.menu_rect
+    }
+
+    /// Demo slash commands (`/clear` and `/help` are functional; the rest
+    /// demonstrate the menu's filtering).
+    fn demo_commands() -> Vec<SlashCommand> {
+        vec![
+            SlashCommand::new("clear", "Clear the transcript and start fresh"),
+            SlashCommand::new("help", "Show keyboard shortcuts"),
+            SlashCommand::new("context", "Show context usage (demo)"),
+            SlashCommand::new("model", "Choose a model (demo)"),
+            SlashCommand::new("status", "Show session status (demo)"),
+        ]
+    }
+
+    /// Demo keybinding sections for the `?` panel.
+    fn demo_help() -> HelpPanel {
+        HelpPanel::new(vec![
+            HelpSection {
+                title: "chat",
+                entries: vec![
+                    HelpEntry {
+                        keys: "enter",
+                        description: "send message",
+                    },
+                    HelpEntry {
+                        keys: "esc",
+                        description: "view transcript",
+                    },
+                    HelpEntry {
+                        keys: "j/k",
+                        description: "scroll",
+                    },
+                    HelpEntry {
+                        keys: "click",
+                        description: "expand / collapse a hint",
+                    },
+                ],
+            },
+            HelpSection {
+                title: "prompt",
+                entries: vec![
+                    HelpEntry {
+                        keys: "/",
+                        description: "open the command menu",
+                    },
+                    HelpEntry {
+                        keys: "?",
+                        description: "toggle this panel",
+                    },
+                ],
+            },
+            HelpSection {
+                title: "host",
+                entries: vec![
+                    HelpEntry {
+                        keys: "tab",
+                        description: "next component",
+                    },
+                    HelpEntry {
+                        keys: "m",
+                        description: "cycle session mode",
+                    },
+                    HelpEntry {
+                        keys: "q",
+                        description: "quit",
+                    },
+                ],
+            },
+        ])
+    }
+
+    /// Run a confirmed demo slash command.
+    fn run_command(&mut self, name: &str) {
+        match name {
+            "clear" => {
+                self.messages.clear();
+                self.phase = None;
+                self.rendered.clear();
+                self.reply_cache.clear();
+                self.activity_ranges.clear();
+                self.scroll = 0;
+            }
+            "help" => self.help_open = true,
+            _ => {}
+        }
+    }
+
+    /// Keys while the slash-command menu is open: filter characters extend
+    /// the input (and the filter), Backspace shrinks it, arrows move the
+    /// selection, Enter confirms, Esc closes.
+    fn event_with_menu(&mut self, key: KeyEvent) -> bool {
+        let menu = self.slash_menu.as_mut().expect("menu open");
+        match key.code {
+            KeyCode::Char(c) if !c.is_control() => {
+                self.input.push(c);
+                let filter = self.input.get(1..).unwrap_or("").to_string();
+                menu.set_filter(&filter);
+                true
+            }
+            KeyCode::Backspace => {
+                self.input.pop();
+                if self.input.is_empty() {
+                    // backspacing past the `/` closes the menu
+                    self.slash_menu = None;
+                } else {
+                    let filter = self.input.get(1..).unwrap_or("").to_string();
+                    menu.set_filter(&filter);
+                }
+                true
+            }
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                menu.key(key);
+                true
+            }
+            KeyCode::Enter => {
+                if let Some(abs) = menu.key(key) {
+                    let cmd = menu.commands[abs].name.clone();
+                    self.slash_menu = None;
+                    self.input.clear();
+                    self.run_command(&cmd);
+                }
+                true
+            }
+            KeyCode::Esc => {
+                // close the menu; the `/` stays in the input
+                self.slash_menu = None;
+                true
+            }
+            _ => true,
+        }
     }
 
     /// Submit a user message and start a new agent turn.
@@ -802,6 +958,17 @@ impl Component for AgentChat {
         ]);
         buf.set_line(0, input_area.y, &input_line, input_area.width);
 
+        // floating overlays: the slash menu above the input, the help panel
+        // centered over the transcript
+        if let Some(menu) = &mut self.slash_menu {
+            self.menu_rect = menu.draw(input_area, buf);
+        } else {
+            self.menu_rect = Rect::default();
+        }
+        if self.help_open {
+            Self::demo_help().draw(area, buf);
+        }
+
         let spinner = activities::spinner(self.tick);
 
         // pre-render every message into a flat row list, recording the
@@ -866,9 +1033,31 @@ impl Component for AgentChat {
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 if self.typing {
+                    // the `?` help panel owns the keyboard while open
+                    if self.help_open {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('?') => self.help_open = false,
+                            _ => {}
+                        }
+                        return true;
+                    }
+                    // the slash menu owns the keyboard while open
+                    if self.slash_menu.is_some() {
+                        return self.event_with_menu(key);
+                    }
                     match key.code {
                         KeyCode::Char(c) => {
-                            self.input.push(c);
+                            if c == '/' && self.input.is_empty() {
+                                // `/` in an empty prompt opens the command menu
+                                // (the symbol stays in the input as the trigger)
+                                self.slash_menu =
+                                    Some(SlashCommandMenu::new(Self::demo_commands()));
+                                self.input.push(c);
+                            } else if c == '?' && self.input.is_empty() {
+                                self.help_open = true;
+                            } else {
+                                self.input.push(c);
+                            }
                             return true;
                         }
                         KeyCode::Backspace => {
@@ -932,6 +1121,33 @@ impl Component for AgentChat {
                 }
                 // click a hint header to expand / collapse it
                 MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                    if self.help_open {
+                        self.help_open = false;
+                        return true;
+                    }
+                    if let Some(menu) = &mut self.slash_menu {
+                        let r = self.menu_rect;
+                        let inside = m.column >= r.x
+                            && m.row >= r.y
+                            && m.column < r.x + r.width
+                            && m.row < r.y + r.height;
+                        if inside {
+                            let local = MouseEvent {
+                                kind: m.kind,
+                                column: m.column - r.x,
+                                row: m.row - r.y,
+                                modifiers: m.modifiers,
+                            };
+                            if let Some(abs) = menu.click(&local) {
+                                let cmd = menu.commands[abs].name.clone();
+                                self.slash_menu = None;
+                                self.input.clear();
+                                self.run_command(&cmd);
+                            }
+                            return true;
+                        }
+                        // clicks outside the menu still toggle hints
+                    }
                     let chat_height = self.view_height;
                     if m.row < chat_height {
                         self.toggle_at(self.scroll + m.row);

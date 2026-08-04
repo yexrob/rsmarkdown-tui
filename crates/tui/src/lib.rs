@@ -45,8 +45,10 @@
 
 pub mod activities;
 pub mod app;
+pub mod command_menu;
 pub mod component;
 pub mod components;
+pub mod help;
 pub mod image;
 pub mod permission;
 pub mod renderer;

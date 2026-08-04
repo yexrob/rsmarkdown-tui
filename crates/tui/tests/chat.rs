@@ -22,6 +22,15 @@ fn click(row: u16) -> Event {
     })
 }
 
+fn click_at(column: u16, row: u16) -> Event {
+    Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    })
+}
+
 fn draw_chat(chat: &mut AgentChat) -> (Buffer, Rect) {
     // tall area: nothing scrolls, so click rows map 1:1 to document rows
     let area = Rect::new(0, 0, 100, 200);
@@ -276,4 +285,168 @@ fn spinner_cycles() {
     let b = activities::spinner(1);
     assert_ne!(a, b);
     assert_eq!(activities::spinner(10), a, "cycles after full rotation");
+}
+
+// --- slash command menu + help panel integration ---
+
+fn draw_chat_text(chat: &mut AgentChat) -> String {
+    let (buf, _) = draw_chat(chat);
+    buffer_text(&buf)
+}
+
+#[test]
+fn slash_in_empty_prompt_opens_command_menu() {
+    let mut chat = AgentChat::new();
+    // the scripted turn keeps running; stop the agent so the transcript is quiet
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    // esc to view, esc back to typing (typing starts on)
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    assert!(!chat.menu_open(), "no menu yet");
+    assert!(chat.event(key(KeyCode::Char('/'))), "slash consumed");
+    assert!(chat.menu_open(), "menu opened by / in empty prompt");
+    let text = draw_chat_text(&mut chat);
+    assert!(text.contains("/clear"), "command row drawn");
+    assert!(text.contains("Clear the transcript"), "description drawn");
+}
+
+#[test]
+fn slash_menu_filters_as_you_type_and_backspace_closes() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Char('/')));
+    chat.event(key(KeyCode::Char('m')));
+    chat.event(key(KeyCode::Char('o')));
+    let text = draw_chat_text(&mut chat);
+    assert!(text.contains("/mo"), "filter shown in menu title");
+    assert!(!text.contains("/clear"), "filtered out");
+
+    chat.event(key(KeyCode::Backspace));
+    chat.event(key(KeyCode::Backspace));
+    assert!(chat.menu_open(), "menu still open with just the /");
+    chat.event(key(KeyCode::Backspace));
+    assert!(!chat.menu_open(), "backspacing past the / closes the menu");
+}
+
+#[test]
+fn enter_confirms_clear_command() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    assert!(chat.message_count() > 0, "transcript has messages");
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Char('/')));
+    chat.event(key(KeyCode::Char('c')));
+    chat.event(key(KeyCode::Enter));
+    assert!(!chat.menu_open(), "menu closed after confirm");
+    assert_eq!(chat.message_count(), 0, "/clear wiped the transcript");
+}
+
+#[test]
+fn esc_closes_menu_keeping_slash_in_input() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Char('/')));
+    chat.event(key(KeyCode::Esc));
+    assert!(!chat.menu_open(), "esc closed the menu");
+    let text = draw_chat_text(&mut chat);
+    assert!(text.contains("you › /"), "the / stays in the input");
+}
+
+#[test]
+fn question_mark_toggles_help_panel() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    assert!(!chat.help_open(), "no panel yet");
+    assert!(chat.event(key(KeyCode::Char('?'))), "? consumed");
+    assert!(chat.help_open(), "panel opened");
+    let text = draw_chat_text(&mut chat);
+    assert!(text.contains("Keyboard shortcuts"), "panel drawn");
+    assert!(text.contains("send message"), "entry drawn");
+
+    // ? again closes it (toggle)
+    assert!(chat.event(key(KeyCode::Char('?'))));
+    assert!(!chat.help_open(), "panel toggled off");
+    // and esc closes it too
+    chat.event(key(KeyCode::Char('?')));
+    assert!(chat.help_open());
+    assert!(chat.event(key(KeyCode::Esc)));
+    assert!(!chat.help_open(), "esc closed the panel");
+}
+
+#[test]
+fn help_command_via_menu_opens_panel() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Char('/')));
+    chat.event(key(KeyCode::Char('h')));
+    chat.event(key(KeyCode::Enter));
+    assert!(!chat.menu_open(), "menu closed");
+    assert!(chat.help_open(), "/help opened the panel");
+    assert_eq!(chat.message_count(), 2, "transcript untouched by /help");
+}
+
+#[test]
+fn menu_not_opened_from_view_mode() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    chat.event(key(KeyCode::Esc)); // typing -> view mode
+    assert!(!chat.menu_open());
+    // in view mode / is not a command trigger; it must not open the menu
+    chat.event(key(KeyCode::Char('/')));
+    assert!(!chat.menu_open(), "/ only triggers from the prompt");
+}
+
+#[test]
+fn mouse_click_selects_and_confirms_menu_command() {
+    let mut chat = AgentChat::new();
+    for _ in 0..400 {
+        chat.on_tick();
+    }
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Esc));
+    chat.event(key(KeyCode::Char('/')));
+    // draw so the menu rect is recorded
+    let (buf, area) = draw_chat(&mut chat);
+    let text = buffer_text(&buf);
+    assert!(text.contains("/clear"), "menu visible");
+    let r = chat.menu_rect();
+    assert!(r.width > 0, "menu rect recorded");
+
+    // first click on the second row selects it (the menu is centered, so
+    // click inside its horizontal span)
+    let second_y = r.y + 2; // first inner row is the first command
+    chat.event(click_at(r.x + 10, second_y));
+    let (buf, _) = draw_chat(&mut chat);
+    let text = buffer_text(&buf);
+    assert!(text.contains("❯ /help"), "second row selected");
+    assert!(chat.menu_open(), "select only");
+
+    // second click confirms
+    chat.event(click_at(r.x + 10, second_y));
+    assert!(!chat.menu_open(), "second click confirmed");
+    assert!(chat.help_open(), "/help ran");
+    let _ = area;
 }
