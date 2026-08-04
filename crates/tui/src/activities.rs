@@ -101,6 +101,8 @@ pub struct Thinking {
     /// Distinguishes consecutive reasoning stages so running/done updates
     /// replace the right hint.
     pub stage: &'static str,
+    /// Output tokens consumed so far (Claude Code: down-arrow N tokens).
+    pub tokens: Option<u64>,
 }
 
 /// Todo lifecycle (mirrors Claude Code: pending -> in_progress -> completed).
@@ -421,6 +423,10 @@ pub struct Activity {
     /// activity is still active) rather than a user click. When an activity
     /// finishes, auto-expanded ones collapse back — user clicks win.
     pub auto_expanded: bool,
+    /// Consumer-provided affordance text for expanding this activity
+    /// (e.g. `"ctrl+o to expand"`). Shown in the fold tail when present;
+    /// the expand trigger itself is the hosting app's choice.
+    pub expand_hint: Option<String>,
 }
 
 impl Activity {
@@ -432,6 +438,7 @@ impl Activity {
             expanded: false,
             content: Vec::new(),
             auto_expanded: false,
+            expand_hint: None,
         }
     }
 
@@ -582,10 +589,11 @@ fn thinking_header(t: &Thinking, spinner: char, theme: &Theme) -> Line<'static> 
             spans.push(Span::styled("─ thinking", theme.thinking()));
         }
     }
-    spans.push(Span::styled(
-        format!(" · {:.1}s", t.duration_ms as f64 / 1000.0),
-        theme.dim(),
-    ));
+    let mut stats = format!("{:.1}s", t.duration_ms as f64 / 1000.0);
+    if let Some(tokens) = t.tokens {
+        stats.push_str(&format!(" · ↓ {tokens} tokens"));
+    }
+    spans.push(Span::styled(format!(" ({stats})"), theme.dim()));
     if let Some(d) = &t.digest {
         let d = crate::renderer::truncate(d, 60);
         spans.push(Span::styled(format!(" · {}", d), theme.dim()));
@@ -657,14 +665,19 @@ fn header_for(h: &Activity, spinner: char, theme: &Theme) -> Line<'static> {
 /// Recursive layout of one activity: header + (expanded) content or nested
 /// transcript, plus clickable ranges for every visible activity.
 /// Fold-summary tail for collapsed-but-expandable activities (Claude Code's
-/// `… +6 lines (ctrl+o to expand)` affordance, adapted to mouse clicks).
+/// `… +6 lines` fold hint; expand is triggered by the consumer
+// (click, ctrl+o, or any keybinding the hosting app wires).
 fn fold_tail(act: &Activity) -> Option<String> {
     if act.expanded {
         return None;
     }
     match &act.kind {
         ActivityKind::Tool(_) if !act.content.is_empty() => {
-            Some(format!("… +{} lines (click to expand)", act.content.len()))
+            let mut tail = format!("… +{} lines", act.content.len());
+            if let Some(hint) = &act.expand_hint {
+                tail.push_str(&format!(" ({hint})"));
+            }
+            Some(tail)
         }
         ActivityKind::SubAgent(a)
             if a.status == SubAgentStatus::Done && !a.transcript.is_empty() =>
@@ -864,6 +877,7 @@ mod tests {
                 None
             },
             stage,
+            tokens: None,
         }));
         if state == ThinkingState::Done {
             h.set_content(vec![Line::styled("reasoning line", Style::default())]);
@@ -876,13 +890,13 @@ mod tests {
         let mut h = thinking("understand", ThinkingState::Done);
         assert!(h.expandable());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "─ thinking · 2.3s · checking imports ─");
+        assert_eq!(text(&lines[0]), "─ thinking (2.3s) · checking imports ─");
         assert_eq!(lines.len(), 1, "collapsed: header only");
 
         h.toggle();
         assert!(h.is_expanded());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "─ thinking · 2.3s · checking imports ─");
+        assert_eq!(text(&lines[0]), "─ thinking (2.3s) · checking imports ─");
         assert_eq!(lines.len(), 2, "expanded: header + content");
         assert!(text(&lines[1]).contains("reasoning line"));
 
@@ -895,7 +909,7 @@ mod tests {
         let h = thinking("understand", ThinkingState::Running);
         assert!(!h.expandable());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "⠋ thinking · 2.3s");
+        assert_eq!(text(&lines[0]), "⠋ thinking (2.3s)");
     }
 
     #[test]
@@ -914,7 +928,7 @@ mod tests {
         let lines = activity_lines(&h, '⠙', &Theme::dark());
         assert_eq!(
             text(&lines[0]),
-            "⏺ ✓ bash cargo test -p core · 12ms · 54 passed … +2 lines (click to expand)"
+            "⏺ ✓ bash cargo test -p core · 12ms · 54 passed … +2 lines"
         );
 
         h.toggle();
@@ -1109,6 +1123,7 @@ mod tests {
                     duration_ms: 300,
                     digest: Some("scanning".into()),
                     stage: "scan",
+                    tokens: Some(147),
                 })),
             ],
             reply: String::new(),

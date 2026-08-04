@@ -138,6 +138,9 @@ pub struct App {
     tasks: Vec<TodoItem>,
     /// Frame counter (task area spinner animation).
     tick_counter: u64,
+    /// When false, the bottom status bar is not drawn and the component
+    /// gets the full frame (apps that render their own input line).
+    status_bar: bool,
 }
 
 impl App {
@@ -158,7 +161,13 @@ impl App {
             task_list_open: false,
             tasks: Vec::new(),
             tick_counter: 0,
+            status_bar: true,
         }
+    }
+
+    /// Toggle the bottom status bar (apps that draw their own input line).
+    pub fn set_status_bar(&mut self, enabled: bool) {
+        self.status_bar = enabled;
     }
 
     /// Index of the focused component.
@@ -211,8 +220,13 @@ impl App {
 
     /// Draw the host frame (layout + focused component + status bar).
     pub fn draw_frame(&mut self, area: ratatui::layout::Rect, buf: &mut Buffer) {
-        let [content_area, status_area] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+        let (content_area, status_area) = if self.status_bar {
+            let [content_area, status_area] =
+                Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+            (content_area, Some(status_area))
+        } else {
+            (area, None)
+        };
         self.content_area = content_area;
 
         let (title, status_text, hints, n) = {
@@ -227,6 +241,10 @@ impl App {
         let badges = self.footer_badges();
         let focused = &mut self.components[self.focused];
         focused.draw(content_area, buf);
+
+        let Some(status_area) = status_area else {
+            return;
+        };
 
         // status bar: focus index, title, badges (mode/agents/PR — most
         // important, first to survive narrow terminals), status, hints, keys

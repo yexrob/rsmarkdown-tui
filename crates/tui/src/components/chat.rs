@@ -539,6 +539,7 @@ impl AgentChat {
                     duration_ms: *elapsed_ms,
                     digest: None,
                     stage: "understand",
+                    tokens: None,
                 }));
                 hint.set_content(Self::reasoning_lines(&REASONING_UNDERSTAND, progress));
                 self.push_hint(hint);
@@ -548,6 +549,7 @@ impl AgentChat {
                         duration_ms: *target_ms,
                         digest: Some("understanding the request".to_string()),
                         stage: "understand",
+                    tokens: None,
                     }));
                     hint.set_content(
                         REASONING_UNDERSTAND
@@ -622,6 +624,7 @@ impl AgentChat {
                         duration_ms: (*elapsed_ms as u64),
                         digest: Some("scanning blocks.rs".to_string()),
                         stage: "scan",
+                    tokens: None,
                     }));
                     thinking.set_content(vec![
                         Line::styled("Looking for parse_markdown_into_blocks…", Style::default()),
@@ -799,6 +802,7 @@ impl AgentChat {
                     duration_ms: *elapsed_ms,
                     digest: None,
                     stage: "compose",
+                    tokens: None,
                 }));
                 hint.set_content(Self::reasoning_lines(&REASONING_COMPOSE, progress));
                 self.push_hint(hint);
@@ -808,6 +812,7 @@ impl AgentChat {
                         duration_ms: *target_ms,
                         digest: Some("composing the reply".to_string()),
                         stage: "compose",
+                    tokens: None,
                     }));
                     hint.set_content(
                         REASONING_COMPOSE
