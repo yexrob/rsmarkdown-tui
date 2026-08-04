@@ -227,6 +227,8 @@ pub struct AgentChat {
     help_open: bool,
     /// Semantic color theme.
     pub theme: Theme,
+    /// The demo checklist (Claude Code task list), broadcast to the host.
+    tasks: TodoList,
 }
 
 impl AgentChat {
@@ -251,6 +253,16 @@ impl AgentChat {
             menu_rect: Rect::default(),
             help_open: false,
             theme: Theme::dark(),
+            tasks: TodoList {
+                title: "Implement the fix".to_string(),
+                items: TODO_ITEMS
+                    .iter()
+                    .map(|t| TodoItem {
+                        text: t.to_string(),
+                        status: TodoStatus::Pending,
+                    })
+                    .collect(),
+            },
         };
         this.submit("What does the pipeline look like?");
         this
@@ -459,9 +471,11 @@ impl AgentChat {
         }
     }
 
-    /// Build the turn's todo hint (one item in progress).
-    fn todo_hint(&self, in_progress: usize) -> Activity {
-        let todo = TodoList {
+    /// Advance the demo checklist (one item in progress). The checklist
+    /// lives in component state and is broadcast to the host task area
+    /// (Claude Code: `Ctrl+T` toggles the task list, up to five tasks).
+    fn update_tasks(&mut self, in_progress: usize) {
+        self.tasks = TodoList {
             title: "Implement the fix".to_string(),
             items: TODO_ITEMS
                 .iter()
@@ -478,10 +492,6 @@ impl AgentChat {
                 })
                 .collect(),
         };
-        let content = activities::todo_lines(&todo, activities::spinner(self.tick), &self.theme);
-        let mut hint = Activity::new(ActivityKind::Todo(todo));
-        hint.set_content(content);
-        hint
     }
 
     /// Reasoning lines up to the current progress fraction.
@@ -501,7 +511,7 @@ impl AgentChat {
         let mut finished = false;
         match &mut phase {
             TurnPhase::Todo => {
-                self.push_hint(self.todo_hint(0));
+                self.update_tasks(0);
                 phase = TurnPhase::Thinking {
                     elapsed_ms: 0,
                     target_ms: 1400,
@@ -547,7 +557,7 @@ impl AgentChat {
                     );
                     self.push_hint(hint);
                     // todo: step 1 done, step 2 in progress
-                    self.push_hint(self.todo_hint(1));
+                    self.update_tasks(1);
                     phase = TurnPhase::SubAgent {
                         call: SubAgent::running(
                             "explore",
@@ -687,7 +697,7 @@ impl AgentChat {
 
                 if *elapsed_ms >= *target_ms {
                     // todo: step 2 done, step 3 in progress
-                    self.push_hint(self.todo_hint(2));
+                    self.update_tasks(2);
                     phase = TurnPhase::Tool {
                         call: ToolCall::running("bash", "cargo test -p rsmarkdown-core"),
                         elapsed_ms: 0,
@@ -739,7 +749,7 @@ impl AgentChat {
                         *elapsed_ms = 0;
                     } else {
                         // todo: step 3 done, step 4 in progress
-                        self.push_hint(self.todo_hint(3));
+                        self.update_tasks(3);
                         phase = TurnPhase::Edit {
                             elapsed_ms: 0,
                             target_ms: 700,
@@ -771,7 +781,7 @@ impl AgentChat {
                     hint.set_content(content);
                     self.push_hint(hint);
                     // todo: step 4 done, step 5 in progress
-                    self.push_hint(self.todo_hint(4));
+                    self.update_tasks(4);
                     phase = TurnPhase::Thinking2 {
                         elapsed_ms: 0,
                         target_ms: 800,
@@ -807,7 +817,7 @@ impl AgentChat {
                     );
                     self.push_hint(hint);
                     // todo: all done
-                    self.push_hint(self.todo_hint(TODO_ITEMS.len()));
+                    self.update_tasks(TODO_ITEMS.len());
                     phase = TurnPhase::Stream;
                 }
             }
@@ -1067,7 +1077,12 @@ impl Component for AgentChat {
                         return self.event_with_menu(key);
                     }
                     match key.code {
-                        KeyCode::Char(c) => {
+                        KeyCode::Char(c)
+                            if !c.is_control()
+                                && !key
+                                    .modifiers
+                                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                        {
                             if c == '/' && self.input.is_empty() {
                                 // `/` in an empty prompt opens the command menu
                                 // (the symbol stays in the input as the trigger)
@@ -1225,6 +1240,10 @@ impl Component for AgentChat {
             .source(r#"subagent "explore""#)
             .content(activities::diff_lines(&diff, &self.theme)),
         )
+    }
+
+    fn tasks(&self) -> Vec<TodoItem> {
+        self.tasks.items.clone()
     }
 
     fn agents(&self) -> Vec<Agent> {

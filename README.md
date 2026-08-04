@@ -192,14 +192,15 @@ subagents to the overview with no coupling.
 
 Activities auto-expand while active (running thinking / tool / subagent)
 and **collapse back when finished** — a click reopens them, and a manual
-click survives subsequent updates. Todo checklists deliberately render as
-ordinary blocks in the document flow (never pinned or auto-expanded): the
-header stays in the transcript and scrolls with the content; a click
-reveals the priority-folded window — the finished section keeps the last
-3 completed items visible (older ones collapse to a leading `… N done`),
-the window shows the in-progress + next unfinished items (at most 5), and
-the rest collapse to a trailing `… +N more`; a fully done list shows its
-last three `[x]` rows instead of a bare count.
+click survives subsequent updates.
+
+Todo checklists live in a **host task area** like Claude Code: `Ctrl+T`
+toggles the panel (bottom-docked, up to five tasks with pending /
+in-progress / done indicators). Components publish their checklist via
+`Component::tasks()` and the host merges them — nothing renders in the
+transcript. The `todo_lines` priority-folding window (last 3 done +
+`… N done`, 5 active items, `… +N more`) is available to any app that
+wants the checklist inline.
 
 ## Theming
 

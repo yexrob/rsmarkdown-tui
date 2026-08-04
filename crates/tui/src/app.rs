@@ -13,12 +13,14 @@ use crossterm::terminal::{
 };
 use crossterm::ExecutableCommand;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Widget};
 use ratatui::Terminal;
 
+use crate::activities::{TodoItem, TodoStatus};
 use crate::component::Component;
-use crate::permission::{DialogAction, PermissionDialog, PermissionRequest};
+use crate::permission::{erase_overlay, DialogAction, PermissionDialog, PermissionRequest};
 use crate::renderer::theme::Theme;
 /// A small status badge shown in the host footer (Claude Code style:
 /// `⏸ plan mode on`, `← for agents`, `PR #446`).
@@ -130,6 +132,12 @@ pub struct App {
     /// Semantic color theme (drives the status bar; broadcast to all
     /// components via [`Component::set_theme`]).
     theme: Theme,
+    /// Whether the task list area is open (`Ctrl+T`).
+    task_list_open: bool,
+    /// Merged checklist from all components ([`Component::tasks`]).
+    tasks: Vec<TodoItem>,
+    /// Frame counter (task area spinner animation).
+    tick_counter: u64,
 }
 
 impl App {
@@ -147,6 +155,9 @@ impl App {
             dialog_rect: ratatui::layout::Rect::default(),
             dialog_action: None,
             theme: Theme::dark(),
+            task_list_open: false,
+            tasks: Vec::new(),
+            tick_counter: 0,
         }
     }
 
@@ -251,11 +262,14 @@ impl App {
             }
             if n > 1 {
                 status.push(Span::styled(
-                    "  [Tab] next  [m] mode  [q] quit",
+                    "  [Tab] next  [m] mode  [ctrl+t] tasks  [q] quit",
                     self.theme.dim(),
                 ));
             } else {
-                status.push(Span::styled("  [m] mode  [q] quit", self.theme.dim()));
+                status.push(Span::styled(
+                    "  [m] mode  [ctrl+t] tasks  [q] quit",
+                    self.theme.dim(),
+                ));
             }
         }
         buf.set_line(0, status_area.y, &Line::from(status), status_area.width);
@@ -263,6 +277,62 @@ impl App {
         // modal overlay: painted last so it covers the transcript
         if let Some(dialog) = &mut self.permission {
             self.dialog_rect = dialog.draw(content_area, buf);
+        } else {
+            self.draw_task_list(content_area, buf);
+        }
+    }
+
+    /// Bottom-docked task list area (Claude Code: `Ctrl+T` toggles the
+    /// to-do checklist, up to five tasks shown).
+    fn draw_task_list(&mut self, area: Rect, buf: &mut Buffer) {
+        if !self.task_list_open || self.tasks.is_empty() {
+            return;
+        }
+        let shown = self.tasks.len().min(5);
+        let height = (shown as u16 + 2).min(area.height);
+        let rect = Rect {
+            x: area.x,
+            y: area.y + area.height.saturating_sub(height),
+            width: area.width,
+            height,
+        };
+        if rect.height < 2 {
+            return;
+        }
+        erase_overlay(buf, rect, &self.theme);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .style(self.theme.overlay())
+            .border_style(self.theme.overlay_border())
+            .title(Line::from(Span::styled(
+                format!("todo · {} tasks", self.tasks.len()),
+                self.theme.tool_running(),
+            )))
+            .title_alignment(ratatui::layout::Alignment::Left);
+        let inner = block.inner(rect);
+        block.render(rect, buf);
+        let bottom = inner.y + inner.height;
+        let mut y = inner.y;
+        let spinner = crate::activities::spinner(self.tick_counter);
+        for item in self.tasks.iter().take(shown) {
+            if y >= bottom {
+                break;
+            }
+            let (marker, style) = match item.status {
+                TodoStatus::Pending => ("[ ] ".to_string(), self.theme.task_open()),
+                TodoStatus::InProgress => (format!("[{}] ", spinner), self.theme.tool_running()),
+                TodoStatus::Done => ("[x] ".to_string(), self.theme.task_done()),
+            };
+            buf.set_line(
+                inner.x + 2,
+                y,
+                &Line::from(vec![
+                    Span::styled(marker, style),
+                    Span::styled(item.text.clone(), style),
+                ]),
+                inner.width.saturating_sub(2),
+            );
+            y += 1;
         }
     }
 
@@ -335,6 +405,13 @@ impl App {
         for component in &mut self.components {
             component.absorb_agents(&merged);
         }
+        // task list broadcast (Claude Code: the to-do checklist)
+        let mut tasks: Vec<TodoItem> = Vec::new();
+        for component in &self.components {
+            tasks.extend(component.tasks());
+        }
+        self.tasks = tasks;
+        self.tick_counter += 1;
         if self.permission.is_none() {
             let focused = &mut self.components[self.focused];
             if let Some(request) = focused.on_ask() {
@@ -471,6 +548,14 @@ impl App {
             }
             KeyCode::Tab => {
                 self.focus_next();
+                true
+            }
+            KeyCode::Char('t')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
+                self.task_list_open = !self.task_list_open;
                 true
             }
             KeyCode::BackTab => {

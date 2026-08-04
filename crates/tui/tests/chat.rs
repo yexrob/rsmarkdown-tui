@@ -74,7 +74,14 @@ fn full_turn_produces_hints_and_reply() {
     assert!(text.contains("✻ Edit"), "diff hint:\n{text}");
     assert!(text.contains("-"), "diff removed lines:\n{text}");
     assert!(text.contains("+"), "diff added lines:\n{text}");
-    assert!(text.contains("5/5 tasks"), "todo all done:\n{text}");
+    let tasks = chat.tasks();
+    assert_eq!(tasks.len(), 5);
+    assert!(
+        tasks
+            .iter()
+            .all(|t| t.status == rsmarkdown_tui::activities::TodoStatus::Done),
+        "demo checklist all done (broadcast to the host task area)"
+    );
     assert!(text.contains("thinking"), "thinking hint:\n{text}");
     assert!(
         text.contains("54 tests passed"),
@@ -168,8 +175,8 @@ fn thinking_hint_expands_to_reasoning() {
         chat.on_tick();
     }
     let (_, _) = draw_chat(&mut chat);
-    // the first hint is the todo list; the second is the thinking block
-    let row = chat.hint_row_ranges().get(1).expect("thinking hint").start;
+    // the first hint is the thinking block (no todo in the transcript)
+    let row = chat.hint_row_ranges().get(0).expect("thinking hint").start;
     assert!(chat.event(click(row)), "click consumed");
     let text = chat.conversation_text();
     assert!(
@@ -201,16 +208,8 @@ fn finished_activities_collapse_by_default() {
     }
     let text = chat.conversation_text();
     assert!(
-        text.contains("todo · 5/5 tasks"),
-        "todo header visible:\n{text}"
-    );
-    assert!(
-        !text.contains("[x] Understand the request"),
-        "finished todo items collapsed:\n{text}"
-    );
-    assert!(
-        !text.contains("… 2 done"),
-        "todo items not rendered while collapsed:\n{text}"
+        !text.contains("todo · "),
+        "todo does not render in the transcript (host task area instead):\n{text}"
     );
     assert!(
         !text.contains("Report findings"),
@@ -220,59 +219,46 @@ fn finished_activities_collapse_by_default() {
         !text.contains("grep -n parse_markdown_into_blocks"),
         "finished subagent nested tool collapsed:\n{text}"
     );
-    // a click reopens the finished todo (row 0 is the user message)
-    let (_, _) = draw_chat(&mut chat);
-    let todo_row = chat
-        .hint_row_ranges()
-        .iter()
-        .find(|r| r.path == [0])
-        .map(|r| r.start)
-        .expect("todo row range");
-    assert!(chat.event(click(todo_row)), "click on todo header");
-    let text = chat.conversation_text();
+    // the checklist itself is broadcast, all done
+    let tasks = chat.tasks();
+    assert_eq!(tasks.len(), 5);
     assert!(
-        text.contains("… 2 done") && text.contains("[x] Verify the result"),
-        "todo priority view after click (fold + last done rows):\n{text}"
+        tasks
+            .iter()
+            .all(|t| t.status == rsmarkdown_tui::activities::TodoStatus::Done),
+        "checklist completed in the task area"
     );
 }
 
 #[test]
-fn todo_is_an_ordinary_block() {
-    // a todo renders as one header row in the document flow (not pinned,
-    // not auto-expanded) even while it is in progress; details appear on
-    // click, and thinking auto-expands while running
+fn checklist_broadcasts_through_the_turn() {
+    // the checklist lives in the task area (host), not the transcript:
+    // statuses evolve from pending to done as the scripted turn runs
     let mut chat = AgentChat::new();
-    for _ in 0..6 {
+    chat.on_tick(); // todo phase: first item in progress
+    let text = chat.conversation_text();
+    assert!(
+        !text.contains("todo · "),
+        "no todo block in the transcript:\n{text}"
+    );
+    let tasks = chat.tasks();
+    assert_eq!(
+        tasks[0].status,
+        rsmarkdown_tui::activities::TodoStatus::InProgress
+    );
+    assert_eq!(
+        tasks[4].status,
+        rsmarkdown_tui::activities::TodoStatus::Pending
+    );
+    for _ in 0..300 {
         chat.on_tick();
     }
-    let text = chat.conversation_text();
+    let tasks = chat.tasks();
     assert!(
-        text.contains("todo · 0/5 tasks"),
-        "todo header row:\n{text}"
-    );
-    assert!(
-        !text.contains("Explore the codebase"),
-        "todo items collapsed while in progress:\n{text}"
-    );
-    // running thinking is auto-expanded
-    assert!(
-        text.contains("Let me check how the pipeline is structured"),
-        "running thinking expanded:\n{text}"
-    );
-
-    // a click reveals the priority window
-    let (_, _) = draw_chat(&mut chat);
-    let todo_row = chat
-        .hint_row_ranges()
-        .iter()
-        .find(|r| r.path == [0])
-        .map(|r| r.start)
-        .expect("todo row range");
-    assert!(chat.event(click(todo_row)), "click todo header");
-    let text = chat.conversation_text();
-    assert!(
-        text.contains("Understand the request") && text.contains("Explore the codebase"),
-        "todo window after click:\n{text}"
+        tasks
+            .iter()
+            .all(|t| t.status == rsmarkdown_tui::activities::TodoStatus::Done),
+        "all done at the end of the turn"
     );
 }
 
@@ -291,8 +277,8 @@ fn click_during_streaming_stays_collapsed() {
         .iter()
         .find(|r| {
             r.path.len() == 1 && {
-                // subagent is the 3rd activity in the message (path [2])
-                r.path == [2]
+                // subagent is the 2nd activity in the message (path [1])
+                r.path == [1]
             }
         })
         .map(|r| r.start)
@@ -323,7 +309,7 @@ fn nested_subagent_click() {
     let sub_row = chat
         .hint_row_ranges()
         .iter()
-        .find(|r| r.path.len() == 1 && r.path == [2])
+        .find(|r| r.path.len() == 1 && r.path == [1])
         .map(|r| r.start)
         .expect("subagent row");
     assert!(chat.event(click(sub_row)), "subagent header click");
@@ -387,7 +373,7 @@ fn slash_in_empty_prompt_opens_command_menu() {
     // the transcript still renders outside the menu rect; only the menu's
     // own area is covered (solid overlay background)
     assert!(
-        text.contains("todo · "),
+        text.contains("thinking"),
         "transcript above the menu still renders:\n{text}"
     );
     let (buf, _) = draw_chat(&mut chat);
@@ -468,7 +454,7 @@ fn question_mark_toggles_help_panel() {
     assert!(text.contains("Keyboard shortcuts"), "panel drawn");
     assert!(text.contains("send message"), "entry drawn");
     assert!(
-        text.contains("todo · "),
+        text.contains("thinking"),
         "transcript still renders outside the help panel:\n{text}"
     );
 

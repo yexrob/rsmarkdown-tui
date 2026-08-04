@@ -58,31 +58,43 @@ fn setup() -> (App, Terminal<TestBackend>) {
 }
 
 #[test]
-fn host_routes_clicks_to_component() {
+fn host_task_area_toggles_with_ctrl_t() {
     let (mut app, mut terminal) = setup();
 
+    // closed by default: no task panel anywhere in the frame
     let rows = buffer_text(terminal.backend().buffer());
     assert!(
-        !rows.iter().any(|r| r.contains("… 5 done")),
-        "finished todo collapsed by default"
+        !rows.iter().any(|r| r.contains("todo · ")),
+        "task area hidden by default"
     );
-    // find the todo header row ("todo · 5/5 tasks")
-    let todo_row = rows
-        .iter()
-        .position(|r| r.contains("todo · "))
-        .expect("todo header visible") as u16;
 
-    // click it through the host with absolute coordinates to expand
-    assert!(app.route(click(5, todo_row)), "click routed");
-
+    // Ctrl+T opens the task list (Claude Code to-do checklist)
+    let ctrl_t = Event::Key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    assert!(app.route(ctrl_t), "ctrl+t routed");
     terminal
         .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
         .expect("redraw");
     let rows = buffer_text(terminal.backend().buffer());
     assert!(
-        rows.iter().any(|r| r.contains("… 2 done"))
-            && rows.iter().any(|r| r.contains("[x] Verify the result")),
-        "todo priority view after the click"
+        rows.iter().any(|r| r.contains("todo · 5 tasks")),
+        "task panel with the checklist count"
+    );
+    // all five tasks done after the full turn, last ones visible
+    assert!(
+        rows.iter().any(|r| r.contains("[x] Verify the result")),
+        "task rows rendered"
+    );
+
+    // Ctrl+T closes it again
+    let ctrl_t = Event::Key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    assert!(app.route(ctrl_t), "ctrl+t routed again");
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("redraw");
+    let rows = buffer_text(terminal.backend().buffer());
+    assert!(
+        !rows.iter().any(|r| r.contains("todo · ")),
+        "task area closed again"
     );
 }
 

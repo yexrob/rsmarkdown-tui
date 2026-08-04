@@ -6,6 +6,7 @@ use crossterm::event::Event;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
+use crate::activities::TodoItem;
 use crate::agent::Agent;
 use crate::app::FooterBadge;
 use crate::permission::{DialogAction, PermissionRequest};
@@ -71,6 +72,13 @@ pub trait Component {
     /// Receive the merged agent table broadcast by the host (see
     /// [`Self::agents`]). Default: ignore.
     fn absorb_agents(&mut self, _agents: &[Agent]) {}
+
+    /// The checklist this component wants to show in the host task area
+    /// (Claude Code: `Ctrl+T` toggles the task list). The host merges all
+    /// components' broadcasts and renders up to five tasks.
+    fn tasks(&self) -> Vec<TodoItem> {
+        Vec::new()
+    }
 
     /// Switch the semantic color theme of this component. The host calls
     /// this on every component when the app theme changes ([`crate::App::set_theme`]).

@@ -45,6 +45,7 @@
 - [x] **③ 权限确认框**:`PermissionRequest`/`PermissionDialog` 模态组件(宿主挂载,`App::ask` / 组件 `on_ask` 触发),编号选项 + `❯` 选中(方向键/数字/回车/双击),Esc 取消,标题/目标/提问/请求来源逐项对齐 v2.0.36 转录,内容复用 activity diff 渲染(上限 8 行 + `… +N more` 尾);测试 `tests/permission.rs`(8 项端到端)
 - [x] **④ `/` 命令菜单 + `?` 帮助面板**:`SlashCommandMenu`(空 prompt 输入 `/` 打开,前缀过滤 + `❯` 选中 + 滚动 + 鼠标单击选中/双击确认,Enter 执行,Esc 关闭,退格删掉 `/` 才收);`HelpPanel`(空 prompt `?` 展开/收起,分区键位列表 + 滚动,Esc 关闭);demo 中 `/clear` 清空转录、`/help` 打开面板;测试 `tests/command_menu.rs`(9 项)+ chat 集成 8 项
 - [x] **⑤ Agent 总览屏**:`Agent`/`AgentStatus`/`AgentColor`(8 色身份)纯数据模型 + `AgentView` 组件(Pinned/Ready for review/Needs input/Working/Completed 分组表、header 计数、`✻✽✢∙✕` 状态图标 + Working 动画、PR #N + age 列、Completed 折叠 `… N more`、Enter 打开 transcript 浮层、Space peek(含 reply 输入)、`x` dismiss、Esc 返回、鼠标滚动/点击);宿主 `agents()`/`absorb_agents()` 广播机制,任何组件可发布 agent 状态、任何组件可吸收合并表;demo chat 把自己的 SubAgent 导出广播,AgentView 自动呈现;测试 `tests/agent_view.rs`(13 项)
+- [x] **任务区(CC 对齐)**:`Ctrl+T` 开关常驻任务面板(宿主底部,最多 5 项,pending/进行中/完成指示器,进行中动画),组件经 `Component::tasks()` 广播清单;转录中不再渲染 todo 块
 - [x] **⑥ 语义色 token 化**:`Theme` 值对象 — 语义 token(`text/inactive/claude/suggestion/permission/remember/success/error/warning` + 渲染/活动/diff/状态栏/浮层全部收敛为方法)映射到具体色值;预设 `dark`(原观感)/`light`(深墨浅底)/`automatic`(=dark 起步,文档标注);`App::set_theme` 广播 `Component::set_theme`,渲染路径(renderer/activities/面板/状态栏)显式携带 `&Theme`;测试 `tests/theme.rs`(3 项)+ theme 单测
 
 ## 验收锚点
