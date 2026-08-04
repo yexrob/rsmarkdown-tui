@@ -12,6 +12,6 @@ pub mod components;
 pub mod image;
 pub mod renderer;
 
-pub use app::{run_tui, App};
+pub use app::{run_tui, App, FooterBadge, PrStatus, SessionMode};
 pub use component::Component;
 pub use renderer::{plain_text, render_block, render_inlines, truncate, StreamMarkdownRenderer};

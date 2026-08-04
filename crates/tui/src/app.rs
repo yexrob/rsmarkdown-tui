@@ -20,6 +20,77 @@ use ratatui::Terminal;
 use crate::component::Component;
 use crate::renderer::theme;
 
+/// A small status badge shown in the host footer (Claude Code style:
+/// `⏸ plan mode on`, `← for agents`, `PR #446`).
+#[derive(Debug, Clone)]
+pub struct FooterBadge {
+    pub text: String,
+    pub style: ratatui::style::Style,
+}
+
+impl FooterBadge {
+    pub fn new(text: impl Into<String>, style: ratatui::style::Style) -> Self {
+        Self {
+            text: text.into(),
+            style,
+        }
+    }
+}
+
+/// Session permission mode (displayed in the footer; `m` cycles).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SessionMode {
+    #[default]
+    Default,
+    AcceptEdits,
+    Plan,
+}
+
+impl SessionMode {
+    pub fn next(self) -> Self {
+        match self {
+            SessionMode::Default => SessionMode::AcceptEdits,
+            SessionMode::AcceptEdits => SessionMode::Plan,
+            SessionMode::Plan => SessionMode::Default,
+        }
+    }
+
+    /// Claude Code footer badge text for this mode.
+    pub fn badge(self) -> Option<FooterBadge> {
+        match self {
+            SessionMode::Default => None,
+            SessionMode::AcceptEdits => Some(FooterBadge::new(
+                "⏵⏵ accept edits on (m to cycle)",
+                theme::mode_on(),
+            )),
+            SessionMode::Plan => Some(FooterBadge::new(
+                "⏸ plan mode on (m to cycle)",
+                theme::mode_on(),
+            )),
+        }
+    }
+}
+
+/// Review status of a pull request badge (underline color encodes it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrStatus {
+    Approved,
+    Pending,
+    ChangesRequested,
+    Draft,
+}
+
+impl PrStatus {
+    pub fn color(self) -> ratatui::style::Color {
+        match self {
+            PrStatus::Approved => ratatui::style::Color::LightGreen,
+            PrStatus::Pending => ratatui::style::Color::LightYellow,
+            PrStatus::ChangesRequested => ratatui::style::Color::LightRed,
+            PrStatus::Draft => ratatui::style::Color::DarkGray,
+        }
+    }
+}
+
 pub struct App {
     components: Vec<Box<dyn Component>>,
     focused: usize,
@@ -28,6 +99,10 @@ pub struct App {
     /// Content area of the last frame — used to translate mouse coordinates
     /// into component-local space before routing.
     content_area: ratatui::layout::Rect,
+    /// Session permission mode.
+    mode: SessionMode,
+    /// Demo pull-request badge (None hides it).
+    pr: Option<(u32, PrStatus)>,
 }
 
 impl App {
@@ -38,6 +113,8 @@ impl App {
             tick: Duration::from_millis(33),
             last_tick: Instant::now(),
             content_area: ratatui::layout::Rect::default(),
+            mode: SessionMode::default(),
+            pr: None,
         }
     }
 
@@ -100,26 +177,35 @@ impl App {
                 self.components.len(),
             )
         };
+        let badges = self.footer_badges();
         let focused = &mut self.components[self.focused];
         focused.draw(content_area, buf);
 
-        // status bar: focus index, component title, its status line and hints
+        // status bar: focus index, title, badges (mode/agents/PR — most
+        // important, first to survive narrow terminals), status, hints, keys
         let title_style = if n > 1 {
             theme::status()
         } else {
             theme::status_inactive()
         };
-        let mut status = vec![
-            Span::styled(format!(" [{}] {} ", self.focused + 1, title), title_style),
-            Span::styled(format!(" {} ", status_text), theme::text()),
-        ];
+        let mut status = vec![Span::styled(
+            format!(" [{}] {} ", self.focused + 1, title),
+            title_style,
+        )];
+        for badge in &badges {
+            status.push(Span::styled(format!("  {}", badge.text), badge.style));
+        }
+        status.push(Span::styled(format!(" {}", status_text), theme::text()));
         if !hints.is_empty() {
             status.push(Span::styled(format!(" {}", hints), theme::dim()));
         }
         if n > 1 {
-            status.push(Span::styled("  [Tab] next  [q] quit", theme::dim()));
+            status.push(Span::styled(
+                "  [Tab] next  [m] mode  [q] quit",
+                theme::dim(),
+            ));
         } else {
-            status.push(Span::styled("  [q] quit", theme::dim()));
+            status.push(Span::styled("  [m] mode  [q] quit", theme::dim()));
         }
         buf.set_line(0, status_area.y, &Line::from(status), status_area.width);
     }
@@ -169,10 +255,47 @@ impl App {
         focused.on_tick();
     }
 
+    /// Current session mode (tests).
+    pub fn mode(&self) -> SessionMode {
+        self.mode
+    }
+
+    /// Cycle the session permission mode (`m`).
+    pub fn cycle_mode(&mut self) {
+        self.mode = self.mode.next();
+    }
+
+    /// Set the demo pull-request badge (`None` hides it).
+    pub fn set_pr(&mut self, number: u32, status: PrStatus) {
+        self.pr = Some((number, status));
+    }
+
+    /// Footer badges: session mode + focused component's own badges.
+    fn footer_badges(&self) -> Vec<FooterBadge> {
+        let mut badges = Vec::new();
+        if let Some(b) = self.mode.badge() {
+            badges.push(b);
+        }
+        if let Some((n, status)) = self.pr {
+            let mut style = ratatui::style::Style::default()
+                .fg(status.color())
+                .add_modifier(ratatui::style::Modifier::UNDERLINED);
+            style = style.add_modifier(ratatui::style::Modifier::BOLD);
+            badges.push(FooterBadge::new(format!("PR #{}", n), style));
+        }
+        let focused = &self.components[self.focused];
+        badges.extend(focused.footer_badges());
+        badges
+    }
+
     /// Host-level keys (fallback when the focused component did not consume).
     fn handle_host_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
             KeyCode::Char('q') => false,
+            KeyCode::Char('m') => {
+                self.cycle_mode();
+                true
+            }
             KeyCode::Tab => {
                 self.focus_next();
                 true

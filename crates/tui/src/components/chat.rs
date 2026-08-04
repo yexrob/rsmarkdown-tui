@@ -960,6 +960,40 @@ impl Component for AgentChat {
             "[esc] type  [j/k] scroll  click a hint to expand/collapse"
         }
     }
+
+    fn footer_badges(&self) -> Vec<crate::app::FooterBadge> {
+        // Claude Code: `← for agents` / `← 2 agents`, flashing `← 2 done`
+        let mut running = 0;
+        let mut done = 0;
+        for msg in &self.messages {
+            for hint in &msg.hints {
+                if let ActivityKind::SubAgent(a) = &hint.kind {
+                    match a.status {
+                        SubAgentStatus::Running => running += 1,
+                        SubAgentStatus::Done => done += 1,
+                        SubAgentStatus::Error => {}
+                    }
+                }
+            }
+        }
+        if running > 0 {
+            let text = if running == 1 {
+                "← for agents".to_string()
+            } else {
+                format!("← {} agents", running)
+            };
+            vec![crate::app::FooterBadge::new(text, theme::tool_running())]
+        } else if done > 0 {
+            let text = if done == 1 {
+                "← 1 done".to_string()
+            } else {
+                format!("← {} done", done)
+            };
+            vec![crate::app::FooterBadge::new(text, theme::tool_done())]
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 fn subagent_of(hint: &mut Activity) -> &mut SubAgent {

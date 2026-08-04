@@ -6,6 +6,8 @@ use crossterm::event::Event;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
+use crate::app::FooterBadge;
+
 /// A renderable, interactive pane hosted by [`crate::App`].
 ///
 /// The component owns its own state (content, scroll, focus, streaming
@@ -35,5 +37,11 @@ pub trait Component {
     /// Key hints for the host status bar.
     fn hints(&self) -> &'static str {
         ""
+    }
+
+    /// Footer badges contributed by this component (Claude Code style:
+    /// `← for agents`, subagent status, …).
+    fn footer_badges(&self) -> Vec<FooterBadge> {
+        Vec::new()
     }
 }

@@ -41,7 +41,7 @@
 ## 进展
 
 - [x] **① 层级符号 + 折叠摘要尾**:`⏺` 主活动圆点(Tool/SubAgent/Diff)、`⎿` 结果连接符(首行内容)、`├─/└─` 嵌套树枝 + `│` 延续、折叠摘要尾 `… +N lines (click to expand)` / `N steps (click to expand)` / diff `(click to expand)`
-- [ ] ② Footer 徽标系统
+- [x] **② Footer 徽标系统**:`SessionMode`(`⏵⏵ accept edits on` / `⏸ plan mode on`,`m` 循环)+ 组件贡献徽标(`Component::footer_badges`,chat 报 `← for agents`/`← 1 done`)+ `PR #446` 下划线颜色徽标;徽标优先于状态文本布局(窄终端先保徽标)
 - [ ] ③ 权限确认框
 - [ ] ④ `/` 命令菜单 + `?` 帮助面板
 - [ ] ⑤ Agent 总览屏

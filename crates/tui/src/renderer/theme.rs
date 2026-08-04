@@ -85,6 +85,13 @@ pub fn thinking() -> Style {
         .fg(Color::DarkGray)
         .add_modifier(Modifier::ITALIC)
 }
+/// Footer badge for an active mode (`⏵⏵` / `⏸`).
+pub fn mode_on() -> Style {
+    Style::default()
+        .fg(Color::LightCyan)
+        .add_modifier(Modifier::BOLD)
+}
+
 /// The `⏺` main-activity dot (Claude's accent color).
 pub fn activity_dot() -> Style {
     Style::default()

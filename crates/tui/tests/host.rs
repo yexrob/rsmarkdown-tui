@@ -44,7 +44,7 @@ fn setup() -> (App, Terminal<TestBackend>) {
     }
     // tall terminal: the conversation fits without scrolling, so absolute
     // click rows map 1:1 to document rows
-    let mut terminal = Terminal::new(TestBackend::new(100, 300)).expect("test backend");
+    let mut terminal = Terminal::new(TestBackend::new(160, 300)).expect("test backend");
     terminal
         .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
         .expect("draw");
@@ -121,4 +121,70 @@ fn host_mouse_wheel_scrolls() {
 #[allow(dead_code)]
 fn _key() -> Event {
     Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE))
+}
+
+#[test]
+fn footer_mode_badge_cycles() {
+    let (mut app, mut terminal) = setup();
+    let draw = |app: &mut App, terminal: &mut Terminal<TestBackend>| {
+        terminal
+            .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+            .expect("draw");
+        buffer_text(terminal.backend().buffer())
+    };
+    let m = Event::Key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+    // the chat component starts in typing mode and would consume 'm'
+    let esc = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.route(esc), "esc exits typing mode");
+
+    // default: no mode badge
+    let rows = draw(&mut app, &mut terminal);
+    assert!(
+        !rows.iter().any(|r| r.contains("accept edits")),
+        "no badge by default"
+    );
+
+    // m -> accept edits
+    assert!(app.route(m.clone()), "m routed");
+    let rows = draw(&mut app, &mut terminal);
+    assert!(
+        rows.iter().any(|r| r.contains("⏵⏵ accept edits on")),
+        "accept-edits badge"
+    );
+    assert_eq!(app.mode(), rsmarkdown_tui::SessionMode::AcceptEdits);
+
+    // m -> plan
+    assert!(app.route(m.clone()), "m routed");
+    let rows = draw(&mut app, &mut terminal);
+    assert!(
+        rows.iter().any(|r| r.contains("⏸ plan mode on")),
+        "plan badge"
+    );
+
+    // m -> back to default
+    assert!(app.route(m), "m routed");
+    let rows = draw(&mut app, &mut terminal);
+    assert!(
+        !rows.iter().any(|r| r.contains("plan mode")),
+        "badge cleared"
+    );
+}
+
+#[test]
+fn footer_agent_and_pr_badges() {
+    let (mut app, mut terminal) = setup(); // chat turn completed
+    app.set_pr(446, rsmarkdown_tui::PrStatus::Pending);
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    let rows = buffer_text(terminal.backend().buffer());
+    assert!(
+        rows.last().map_or(false, |r| r.contains("← 1 done")),
+        "agents badge after completed turn: {:?}",
+        rows.last()
+    );
+    assert!(
+        rows.last().map_or(false, |r| r.contains("PR #446")),
+        "pr badge"
+    );
 }

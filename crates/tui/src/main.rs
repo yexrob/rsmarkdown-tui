@@ -13,7 +13,7 @@ use rsmarkdown_tui::components::image::ImagePane;
 use rsmarkdown_tui::components::list::ListView;
 use rsmarkdown_tui::components::markdown::MarkdownViewer;
 use rsmarkdown_tui::components::text::TextReader;
-use rsmarkdown_tui::{run_tui, App};
+use rsmarkdown_tui::{run_tui, App, PrStatus};
 
 fn main() -> std::io::Result<()> {
     let mut app = App::new(vec![
@@ -23,5 +23,7 @@ fn main() -> std::io::Result<()> {
         Box::new(TextReader::new()),
         Box::new(ListView::todo_examples()),
     ]);
+    // demo pull-request badge (underlined, color-encoded review status)
+    app.set_pr(446, PrStatus::Pending);
     run_tui(&mut app)
 }

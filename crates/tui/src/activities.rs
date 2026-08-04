@@ -495,17 +495,6 @@ fn header_for(h: &Activity, spinner: char) -> Line<'static> {
     }
 }
 
-fn indent_line(line: &Line<'static>, depth: usize) -> Line<'static> {
-    if depth == 0 {
-        return line.clone();
-    }
-    let pad = "  ".repeat(depth);
-    let mut spans = Vec::with_capacity(line.spans.len() + 1);
-    spans.push(Span::styled(pad, theme::tool_output()));
-    spans.extend(line.spans.iter().cloned());
-    Line::from(spans)
-}
-
 /// Recursive layout of one activity: header + (expanded) content or nested
 /// transcript, plus clickable ranges for every visible activity.
 /// Fold-summary tail for collapsed-but-expandable activities (Claude Code's
