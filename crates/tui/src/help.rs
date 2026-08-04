@@ -117,7 +117,7 @@ impl HelpPanel {
                 break;
             }
             // section title
-            if row >= skip && y <= inner.y + inner.height - 1 {
+            if row >= skip && y <= inner.y + inner.height.saturating_sub(1) {
                 buf.set_line(
                     inner.x + 1,
                     y,
@@ -133,7 +133,7 @@ impl HelpPanel {
                 if row >= skip + view {
                     break;
                 }
-                if row >= skip && y <= inner.y + inner.height - 1 {
+                if row >= skip && y <= inner.y + inner.height.saturating_sub(1) {
                     let keys = format!("{}", entry.keys);
                     let padding = KEYS_COL.saturating_sub(keys.chars().count() as u16);
                     let line = Line::from(vec![

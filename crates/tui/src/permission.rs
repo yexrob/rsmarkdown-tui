@@ -226,6 +226,12 @@ impl PermissionDialog {
             width: area.width,
             height,
         };
+        // a bordered box needs at least 2 rows; tiny areas just skip the
+        // dialog instead of underflowing the inner rect
+        if rect.height < 2 {
+            self.last_rect = rect;
+            return rect;
+        }
 
         // cover the panel's own area so content behind it does not show
         // through; everything outside the rect keeps rendering normally

@@ -438,6 +438,9 @@ impl AgentView {
             width: area.width,
             height,
         };
+        if rect.height < 2 {
+            return; // too small for a bordered box
+        }
         erase_overlay(buf, rect, theme);
         let block = Block::default()
             .borders(Borders::ALL)
@@ -477,6 +480,9 @@ impl AgentView {
             width: area.width,
             height,
         };
+        if rect.height < 2 {
+            return; // too small for a bordered box
+        }
         erase_overlay(buf, rect, theme);
         let block = Block::default()
             .borders(Borders::ALL)
