@@ -183,7 +183,13 @@ fn overlay_background_separates_from_transcript() {
     let (mut app, _state) = probe_app();
     app.ask(edit_request());
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");
-    draw(&mut app, &mut terminal);
+    let rows = draw(&mut app, &mut terminal);
+    // modal: the component behind the dialog is not rendered at all (the
+    // status bar keeps the title, so only the content area must be empty)
+    assert!(
+        !rows[..rows.len() - 1].iter().any(|r| r.contains("probe")),
+        "no content behind the modal dialog"
+    );
     let r = app.dialog_rect();
     // the bottom padding row of the dialog carries the solid overlay bg,
     // hiding whatever the transcript rendered behind it

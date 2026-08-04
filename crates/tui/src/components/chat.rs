@@ -980,6 +980,11 @@ impl Component for AgentChat {
         if self.help_open {
             Self::demo_help().draw(area, buf);
         }
+        if self.slash_menu.is_some() || self.help_open {
+            // overlay mode: the transcript is not rendered at all, so the
+            // command menu / help panel never blends with content behind it
+            return;
+        }
 
         let spinner = activities::spinner(self.tick);
 

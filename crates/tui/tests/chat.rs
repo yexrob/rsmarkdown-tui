@@ -384,6 +384,11 @@ fn slash_in_empty_prompt_opens_command_menu() {
     assert_eq!(r.x, 0, "left-aligned with the prompt");
     assert_eq!(r.width, 100, "same width as the prompt line");
     assert_eq!(r.y + r.height, 199, "sits directly on the input line");
+    // overlay mode: the transcript is not rendered behind the menu
+    assert!(
+        !text.contains("todo · "),
+        "no transcript content behind the menu:\n{text}"
+    );
 }
 
 #[test]
@@ -453,6 +458,10 @@ fn question_mark_toggles_help_panel() {
     let text = draw_chat_text(&mut chat);
     assert!(text.contains("Keyboard shortcuts"), "panel drawn");
     assert!(text.contains("send message"), "entry drawn");
+    assert!(
+        !text.contains("todo · "),
+        "no transcript content behind the help panel:\n{text}"
+    );
 
     // ? again closes it (toggle)
     assert!(chat.event(key(KeyCode::Char('?'))));
