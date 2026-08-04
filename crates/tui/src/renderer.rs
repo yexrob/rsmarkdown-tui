@@ -47,6 +47,14 @@ impl StreamMarkdownRenderer {
     pub fn lines(&self) -> &[Line<'static>] {
         &self.lines
     }
+
+    /// Cached lines of a single block (index into the last rendered document).
+    pub fn block_lines(&self, index: usize) -> Option<&[Line<'static>]> {
+        self.cached
+            .get(index)
+            .map(|c| c.as_ref().map(|(_, l)| l.as_slice()))
+            .flatten()
+    }
 }
 
 impl Renderer for StreamMarkdownRenderer {

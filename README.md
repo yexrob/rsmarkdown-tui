@@ -56,12 +56,60 @@ The TUI is a small component framework, not a markdown viewer:
 crates/tui/src/
   component.rs        Component trait (draw / event / on_tick / status / hints)
   app.rs              App host: event loop, focus routing, status bar
+  activities.rs            agent hints: thinking blocks + tool calls (framework-level)
+  image.rs            image backend plumbing (protocol detection, slicing)
   components/         pluggable panes:
     markdown.rs         streaming markdown viewer (uses rsmarkdown-core)
+    image.rs            scrollable image viewer
+    chat.rs             agent session: thinking + tool hints + markdown replies
     text.rs             plain-text streaming log (non-markdown component)
     list.rs             selectable task list (interactive component)
   renderer/           StreamMarkdownRenderer: AST -> styled lines (per-block cache)
 ```
+
+## Agent hints (Claude Code style)
+
+The framework ships hint types and rendering in `activities.rs` — any component can
+hold `Vec<AgentHint>` and render them with `hint_lines`:
+
+```
+⠋ thinking · 1.4s                        (running: braille spinner)
+─ thinking · 2.3s · checking imports ─    (done: collapsed, dim)
+⠙ bash cargo test -p core                (tool running: cyan)
+✓ bash cargo test -p core · 900ms         (done: green, with duration)
+✗ curl fetch https://x · 3000ms · exit 7  (error: red)
+… 54 passed · finished in 0.02s           (output preview line, dim)
+```
+
+The `[3] chat` component runs a scripted agent session: type a message
+(`[enter]` to send), watch it think (spinner + collapsed digest), call tools
+(`bash`, `read`), then stream a markdown reply through the same display
+adapter as the markdown component. Consecutive hints are deduplicated by
+identity (tool name / thinking stage) so running -> done updates replace the
+right line.
+
+## Terminal image backend
+
+Images render through the best protocol the terminal supports (detected via
+`Picker::from_query_stdio`): **kitty graphics** (kitty, ghostty, wezterm…),
+sixel, iTerm2, with a unicode half-blocks fallback everywhere else (pure
+text — works headless and in CI).
+
+Scroll correctness comes from two layers:
+
+- [`SlicedImage`](ratatui-image) renders only the visible rows of a
+  partially-scrolled image (skip/drop), so position is exact at any scroll
+  offset — including images *inside* the markdown document flow
+  (`![alt](path)` paragraphs, or the generated `demo://gradient`).
+- The kitty backend uses **unicode placeholders**, so the terminal keeps the
+  picture attached to its cells as the viewport scrolls — no ghost images,
+  no manual erase/replace.
+
+The markdown component lays out documents as text lines + image blocks; the
+demo doc includes one image, and `[2] image` is a standalone scrollable
+viewer component. Headless tests (`tests/image.rs`) verify scroll shifting,
+off-screen clipping and image/text interleaving using the half-blocks
+protocol.
 
 `StreamMarkdownRenderer` implements `rsmarkdown_core::Renderer`: it converts
 each block's AST into styled terminal lines with **per-block caching** — only
@@ -75,9 +123,11 @@ cargo run -p rsmarkdown-tui
 - `[1] markdown` — streams a demo document chunk-by-chunk (simulated LLM
   output); `t` types markdown yourself and watches unclosed `**bold`, fences,
   tables, task lists get completed live; `p` loads a ~200 KB stress document
-- `[2] log` — a streaming plain-text log (proves rendering is not
+- `[2] image` — scrollable image via the terminal graphics backend
+- `[3] chat` — agent session with thinking/tool hints + markdown replies
+- `[4] log` — a streaming plain-text log (proves rendering is not
   markdown-specific)
-- `[3] tasks` — a selectable task list (`space` toggles)
+- `[5] tasks` — a selectable task list (`space` toggles)
 - `Tab` / `[` `]` / `1-3` switch focus, `j/k/PgUp/PgDn/g/G`/mouse wheel scroll,
   `s` auto-scroll, `q` quits
 

@@ -8,12 +8,29 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, Mou
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use rsmarkdown_core::{Document, MarkdownProcessor, Mode, Renderer};
+use ratatui_image::picker::Picker;
+use ratatui_image::sliced::SlicedProtocol;
+
+use rsmarkdown_core::{Block, Document, Inline, MarkdownProcessor, Mode, Renderer};
 
 use crate::component::Component;
+use crate::image;
 use crate::renderer::StreamMarkdownRenderer;
 
 const DEMO_DOC: &str = include_str!("../../demo.md");
+
+/// One row of the document layout: either text lines or a rendered image.
+enum LayoutItem {
+    Text(Vec<ratatui::text::Line<'static>>),
+    /// Index into `self.images`.
+    Image(usize),
+}
+
+/// A loaded image paragraph (url -> sliced protocol).
+struct LoadedImage {
+    url: String,
+    sliced: SlicedProtocol,
+}
 
 pub struct MarkdownViewer {
     processor: MarkdownProcessor,
@@ -28,6 +45,9 @@ pub struct MarkdownViewer {
     cache_hits: u64,
     last_content: String,
     width: usize,
+    layout: Vec<LayoutItem>,
+    images: Vec<LoadedImage>,
+    picker: Picker,
 }
 
 impl Default for MarkdownViewer {
@@ -51,6 +71,9 @@ impl MarkdownViewer {
             cache_hits: 0,
             last_content: String::new(),
             width: 80,
+            layout: Vec::new(),
+            images: Vec::new(),
+            picker: image::detect_picker(),
         };
         this.advance_demo();
         this.advance_demo();
@@ -70,6 +93,122 @@ impl MarkdownViewer {
         self.last_parse_us = t.elapsed().as_micros() as u64;
         self.renderer.render(&self.doc);
         self.cache_hits = self.processor.cache_stats().hits();
+        self.build_layout();
+    }
+
+    /// True when a block is a paragraph whose trailing element is an image.
+    /// (pulldown-cmark emits the alt text as a separate leading Text event.)
+    fn image_paragraph(block: &Block) -> Option<&str> {
+        if let Block::Paragraph(inlines) = block {
+            if let Some(Inline::Image { url, .. }) = inlines.last() {
+                return Some(url);
+            }
+        }
+        None
+    }
+
+    /// Get or load the sliced protocol for an image url.
+    fn image_for(&mut self, url: &str) -> Option<usize> {
+        if let Some(i) = self.images.iter().position(|im| im.url == url) {
+            return Some(i);
+        }
+        let img = image::resolve_image(url)?;
+        let sliced = image::sliced_for(&self.picker, img, (46, 14));
+        self.images.push(LoadedImage {
+            url: url.to_string(),
+            sliced,
+        });
+        Some(self.images.len() - 1)
+    }
+
+    /// Rebuild the document layout (text lines + images) from the parsed blocks.
+    fn build_layout(&mut self) {
+        self.layout.clear();
+        let mut block_lines = Vec::with_capacity(self.doc.blocks.len());
+        for index in 0..self.doc.blocks.len() {
+            let block = &self.doc.blocks[index];
+            let is_image = block
+                .ast
+                .as_ref()
+                .and_then(|ast| ast.children.iter().find_map(Self::image_paragraph))
+                .map(|url| url.to_string());
+            let lines = self.renderer.block_lines(index).map(|l| l.to_vec());
+            block_lines.push((is_image, lines));
+        }
+        for (is_image, lines) in block_lines {
+            if let Some(url) = is_image {
+                if let Some(img_idx) = self.image_for(&url) {
+                    self.layout.push(LayoutItem::Image(img_idx));
+                    continue;
+                }
+            }
+            if let Some(lines) = lines {
+                self.layout.push(LayoutItem::Text(lines));
+            }
+        }
+    }
+
+    /// Raw content (diagnostic helper).
+    pub fn content_debug(&self) -> &str {
+        &self.content
+    }
+
+    /// Parsed blocks (diagnostic helper).
+    pub fn blocks_debug(&self) -> Vec<&rsmarkdown_core::Block> {
+        let mut out = Vec::new();
+        for b in &self.doc.blocks {
+            if let Some(ast) = &b.ast {
+                out.extend(ast.children.iter());
+            }
+        }
+        out
+    }
+
+    /// Number of loaded images (test/diagnostic helper).
+    pub fn images_count(&self) -> usize {
+        self.images.len()
+    }
+
+    /// Number of layout items (test/diagnostic helper).
+    pub fn layout_items(&self) -> usize {
+        self.layout.len()
+    }
+
+    /// Layout items as (kind, rows) — diagnostic helper.
+    pub fn layout_debug(&self) -> Vec<(String, u16)> {
+        let mut out = Vec::new();
+        for item in &self.layout {
+            match item {
+                LayoutItem::Text(l) => out.push(("text".into(), l.len() as u16)),
+                LayoutItem::Image(i) => out.push((
+                    "image".into(),
+                    self.images
+                        .get(*i)
+                        .map(|im| im.sliced.size().height)
+                        .unwrap_or(0),
+                )),
+            }
+        }
+        out
+    }
+
+    /// Document height in rows (text lines + image heights).
+    fn layout_height(&self) -> u16 {
+        let mut h = 0u16;
+        for item in &self.layout {
+            match item {
+                LayoutItem::Text(lines) => h = h.saturating_add(lines.len() as u16),
+                LayoutItem::Image(idx) => {
+                    h = h.saturating_add(
+                        self.images
+                            .get(*idx)
+                            .map(|im| im.sliced.size().height)
+                            .unwrap_or(0),
+                    );
+                }
+            }
+        }
+        h
     }
 
     fn advance_demo(&mut self) {
@@ -90,6 +229,14 @@ impl MarkdownViewer {
         self.typing = false;
         self.scroll = 0;
         self.auto_scroll = true;
+    }
+
+    /// Replace the content directly (used by tests and external feeds).
+    pub fn set_content(&mut self, content: &str) {
+        self.content = content.to_string();
+        self.demo_pos = DEMO_DOC.len();
+        self.typing = false;
+        self.refresh();
     }
 
     /// Generate a ~200 KB stress document and load it instantly.
@@ -199,19 +346,36 @@ impl Component for MarkdownViewer {
             self.width = area.width as usize;
             self.refresh();
         }
-        let lines = self.renderer.lines();
-        let total = lines.len() as u16;
+        // total document height (text lines + image rows)
+        let total = self.layout_height();
         if self.auto_scroll && self.demo_pos < DEMO_DOC.len() {
             self.scroll = total.saturating_sub(area.height);
         }
         let scroll = self.scroll.min(total.saturating_sub(area.height));
-        for (y, line) in lines
-            .iter()
-            .skip(scroll as usize)
-            .take(area.height as usize)
-            .enumerate()
-        {
-            buf.set_line(area.x, area.y + y as u16, line, area.width);
+
+        let mut doc_row = 0u16;
+        for item in &self.layout {
+            match item {
+                LayoutItem::Text(lines) => {
+                    for (i, line) in lines.iter().enumerate() {
+                        let y = doc_row + i as u16;
+                        if y >= scroll && y < scroll + area.height {
+                            buf.set_line(area.x, area.y + y - scroll, line, area.width);
+                        }
+                    }
+                    doc_row += lines.len() as u16;
+                }
+                LayoutItem::Image(idx) => {
+                    if let Some(img) = self.images.get(*idx) {
+                        image::draw_sliced(&img.sliced, doc_row as i16 - scroll as i16, area, buf);
+                    }
+                    doc_row += self
+                        .images
+                        .get(*idx)
+                        .map(|im| im.sliced.size().height)
+                        .unwrap_or(0);
+                }
+            }
         }
     }
 
@@ -242,12 +406,13 @@ impl Component for MarkdownViewer {
 
     fn status(&self) -> String {
         format!(
-            "{}B {} blocks {} lines {}/{}  parse {}µs  cached {}",
+            "{}B {} blocks {} rows {}/{} {} images  parse {}µs  cached {}",
             self.content.len(),
             self.doc.blocks.len(),
-            self.renderer.lines().len(),
+            self.layout_height(),
             self.scroll,
-            self.renderer.lines().len(),
+            self.layout_height(),
+            self.images.len(),
             self.last_parse_us,
             self.cache_hits,
         )

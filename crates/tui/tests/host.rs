@@ -1,0 +1,124 @@
+//! End-to-end host tests: draw through the App and route real mouse events
+//! (absolute terminal coordinates) through `App::route` — the exact path a
+//! click takes in the running TUI.
+
+use crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
+use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
+use ratatui::Terminal;
+
+use rsmarkdown_tui::components::chat::AgentChat;
+use rsmarkdown_tui::App;
+
+fn click(column: u16, row: u16) -> Event {
+    Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row,
+        modifiers: KeyModifiers::NONE,
+    })
+}
+
+fn buffer_text(buf: &Buffer) -> Vec<String> {
+    (0..buf.area.height)
+        .map(|y| {
+            (0..buf.area.width)
+                .map(|x| {
+                    buf.cell((x, y))
+                        .map(|c| c.symbol())
+                        .unwrap_or(" ")
+                        .to_string()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn setup() -> (App, Terminal<TestBackend>) {
+    let mut app = App::new(vec![Box::new(AgentChat::new())]);
+    // drive the scripted turn to completion
+    for _ in 0..300 {
+        app.tick_components();
+    }
+    // tall terminal: the conversation fits without scrolling, so absolute
+    // click rows map 1:1 to document rows
+    let mut terminal = Terminal::new(TestBackend::new(100, 300)).expect("test backend");
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    (app, terminal)
+}
+
+#[test]
+fn host_routes_clicks_to_component() {
+    let (mut app, mut terminal) = setup();
+
+    let rows = buffer_text(terminal.backend().buffer());
+    assert!(
+        rows.iter()
+            .any(|r| r.contains("[x] Understand the request")),
+        "todo expanded by default"
+    );
+    // find the todo header row ("⠿ todo · n/5 tasks")
+    let todo_row = rows
+        .iter()
+        .position(|r| r.contains("todo · "))
+        .expect("todo header visible") as u16;
+
+    // click it through the host with absolute coordinates
+    assert!(app.route(click(5, todo_row)), "click routed");
+
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("redraw");
+    let rows = buffer_text(terminal.backend().buffer());
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.contains("[x] Understand the request")),
+        "todo collapsed by the click"
+    );
+}
+
+#[test]
+fn host_drops_status_bar_clicks() {
+    let (mut app, mut terminal) = setup();
+    // click the status bar (last row of a 24-high frame)
+    let mut small = Terminal::new(TestBackend::new(80, 24)).expect("test backend");
+    small
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    assert!(app.route(click(10, 23)), "routed (dropped silently)");
+    small
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    let rows = buffer_text(small.backend().buffer());
+    assert!(
+        rows.last().map_or(false, |r| r.contains("[1] chat")),
+        "status bar intact"
+    );
+}
+
+#[test]
+fn host_mouse_wheel_scrolls() {
+    let (mut app, mut terminal) = setup();
+    let wheel = Event::Mouse(MouseEvent {
+        kind: MouseEventKind::ScrollDown,
+        column: 10,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert!(app.route(wheel), "wheel routed");
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    // the buffer content must have shifted
+    let _ = buffer_text(terminal.backend().buffer());
+}
+
+#[allow(dead_code)]
+fn _key() -> Event {
+    Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE))
+}

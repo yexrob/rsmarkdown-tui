@@ -46,6 +46,10 @@ fn main() {
 }
 ```
 
+An image rendered through the terminal graphics backend:
+
+![terminal demo](assets/demo.png)
+
 $$\int_a^b f(x)\,dx = F(b) - F(a)$$
 
 $$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$

@@ -5,9 +5,11 @@
 //! - [`components`] — markdown viewer + plain-text and list examples
 //! - [`renderer`] — markdown AST -> styled lines (display adapter)
 
+pub mod activities;
 pub mod app;
 pub mod component;
 pub mod components;
+pub mod image;
 pub mod renderer;
 
 pub use app::{run_tui, App};

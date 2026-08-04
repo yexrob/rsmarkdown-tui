@@ -80,6 +80,48 @@ pub fn hr() -> Style {
 pub fn footnote() -> Style {
     Style::default().fg(Color::DarkGray)
 }
+pub fn thinking() -> Style {
+    Style::default()
+        .fg(Color::DarkGray)
+        .add_modifier(Modifier::ITALIC)
+}
+pub fn tool_running() -> Style {
+    Style::default()
+        .fg(Color::LightCyan)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn tool_done() -> Style {
+    Style::default()
+        .fg(Color::LightGreen)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn tool_error() -> Style {
+    Style::default()
+        .fg(Color::LightRed)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn tool_output() -> Style {
+    Style::default().fg(Color::DarkGray)
+}
+pub fn diff_hunk() -> Style {
+    Style::default()
+        .fg(Color::LightCyan)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn diff_added() -> Style {
+    Style::default().fg(Color::LightGreen)
+}
+pub fn diff_removed() -> Style {
+    Style::default().fg(Color::LightRed)
+}
+pub fn diff_context() -> Style {
+    Style::default().fg(Color::Gray)
+}
+pub fn diff_edit() -> Style {
+    Style::default()
+        .fg(Color::LightYellow)
+        .add_modifier(Modifier::BOLD)
+}
 pub fn status() -> Style {
     Style::default().fg(Color::Black).bg(Color::LightCyan)
 }

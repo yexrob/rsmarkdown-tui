@@ -10,3 +10,5 @@ rsmarkdown-core = { path = "../core" }
 ratatui = "0.30"
 crossterm = "0.29"
 unicode-width = { workspace = true }
+ratatui-image = { version = "11", default-features = false, features = ["crossterm"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif"] }
