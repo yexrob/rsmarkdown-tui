@@ -75,11 +75,15 @@ impl ToolCall {
 /// Watchable 生命周期状态（宿主 app 的 watch 机制透传）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WatchStatus {
+    /// 正在执行。
     Running,
     /// 一轮完成（周期命令的轮次边界）。
     Idle,
+    /// 成功终态。
     Done,
+    /// 失败终态。
     Failed,
+    /// 取消终态。
     Cancelled,
 }
 
