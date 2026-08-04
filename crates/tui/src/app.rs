@@ -242,6 +242,14 @@ impl App {
         let focused = &mut self.components[self.focused];
         focused.draw(content_area, buf);
 
+        // modal overlay: painted last so it covers the transcript.
+        // Runs regardless of the status bar (hosts may disable it).
+        if let Some(dialog) = &mut self.permission {
+            self.dialog_rect = dialog.draw(content_area, buf);
+        } else {
+            self.draw_task_list(content_area, buf);
+        }
+
         let Some(status_area) = status_area else {
             return;
         };
@@ -291,13 +299,6 @@ impl App {
             }
         }
         buf.set_line(0, status_area.y, &Line::from(status), status_area.width);
-
-        // modal overlay: painted last so it covers the transcript
-        if let Some(dialog) = &mut self.permission {
-            self.dialog_rect = dialog.draw(content_area, buf);
-        } else {
-            self.draw_task_list(content_area, buf);
-        }
     }
 
     /// Bottom-docked task list area (Claude Code: `Ctrl+T` toggles the
