@@ -310,6 +310,11 @@ fn slash_in_empty_prompt_opens_command_menu() {
     let text = draw_chat_text(&mut chat);
     assert!(text.contains("/clear"), "command row drawn");
     assert!(text.contains("Clear the transcript"), "description drawn");
+    // position: directly above the prompt line, same width (no floating box)
+    let r = chat.menu_rect();
+    assert_eq!(r.x, 0, "left-aligned with the prompt");
+    assert_eq!(r.width, 100, "same width as the prompt line");
+    assert_eq!(r.y + r.height, 199, "sits directly on the input line");
 }
 
 #[test]

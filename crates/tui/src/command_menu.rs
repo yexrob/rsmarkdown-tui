@@ -139,16 +139,16 @@ impl SlashCommandMenu {
         }
     }
 
-    /// Paint the floating menu above the bottom of `area`. Returns the rect
+    /// Paint the menu directly above the bottom of `area` (the prompt):
+    /// flush to the left, same width as the prompt line. Returns the rect
     /// used (the caller translates mouse events through it).
     pub fn draw(&mut self, area: Rect, buf: &mut Buffer) -> Rect {
-        let width = area.width.min(64);
         let visible = self.filtered_indices.len().min(MENU_ROWS);
         let height = visible as u16 + 2; // borders
         let rect = Rect {
-            x: area.x + area.width.saturating_sub(width) / 2,
+            x: area.x,
             y: area.y.saturating_sub(height),
-            width,
+            width: area.width,
             height,
         };
         let block = Block::default()

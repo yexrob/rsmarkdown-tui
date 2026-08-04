@@ -182,10 +182,10 @@ impl PermissionDialog {
         }
     }
 
-    /// Paint the dialog bottom-anchored and centered in `area`. Returns the
+    /// Paint the dialog as a bottom block of `area`: full width, flush to
+    /// the bottom (the host's status bar sits directly below). Returns the
     /// rect actually used (the host translates mouse events through it).
     pub fn draw(&mut self, area: Rect, buf: &mut Buffer) -> Rect {
-        let width = area.width.min(72);
         let content_count = self.request.content.len();
         let content_rows = content_count.min(CONTENT_CAP);
         let extra = if content_count > CONTENT_CAP { 1 } else { 0 };
@@ -199,9 +199,9 @@ impl PermissionDialog {
             + 1; // bottom padding
         let height = (rows as u16).min(area.height);
         let rect = Rect {
-            x: area.x + area.width.saturating_sub(width) / 2,
+            x: area.x,
             y: area.y + area.height.saturating_sub(height),
-            width,
+            width: area.width,
             height,
         };
 
