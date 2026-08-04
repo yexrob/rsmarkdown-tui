@@ -166,6 +166,10 @@ activity model, footer badges, image backend, and the markdown renderer are
 all reusable pieces. `crates/tui/examples/custom.rs` shows a self-contained
 custom component with `+`/`-` interaction and a footer badge.
 
+## Permission dialog
+
+`App::ask` (or a component's `on_ask`) raises a Claude Code style modal: numbered options with a `❯` selection marker, `Esc` to cancel, Enter / digit / double-click to confirm, and an optional diff preview (reuses the activity diff renderer, capped at 8 rows).
+
 ## Performance
 
 Two tools:

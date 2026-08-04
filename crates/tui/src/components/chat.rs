@@ -21,6 +21,7 @@ use crate::activities::{
     SubAgentStatus, Thinking, ThinkingState, TodoItem, TodoList, TodoStatus, ToolCall, ToolStatus,
 };
 use crate::component::Component;
+use crate::permission::PermissionRequest;
 use crate::renderer::{theme, StreamMarkdownRenderer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,6 +212,8 @@ pub struct AgentChat {
     activity_ranges: Vec<ActivityRowRange>,
     /// Chat viewport height (last draw), excludes the input line.
     view_height: u16,
+    /// Whether the demo permission request was raised this turn.
+    asked: bool,
 }
 
 impl AgentChat {
@@ -230,6 +233,7 @@ impl AgentChat {
             width: 80,
             activity_ranges: Vec::new(),
             view_height: 24,
+            asked: false,
         };
         this.submit("What does the pipeline look like?");
         this
@@ -245,6 +249,7 @@ impl AgentChat {
     fn start_turn(&mut self) {
         self.messages.push(ChatMessage::assistant());
         self.phase = Some(TurnPhase::Todo);
+        self.asked = false;
     }
 
     fn current_assistant(&mut self) -> Option<&mut ChatMessage> {
@@ -942,6 +947,34 @@ impl Component for AgentChat {
     fn on_tick(&mut self) {
         self.tick += 1;
         self.advance(33);
+    }
+
+    fn on_ask(&mut self) -> Option<PermissionRequest> {
+        // demo: once the Edit diff is done, ask permission to edit the file
+        // (Claude Code shows the diff in the prompt)
+        if self.asked {
+            return None;
+        }
+        let asking = matches!(self.phase, Some(TurnPhase::Thinking2 { .. }));
+        if !asking {
+            return None;
+        }
+        self.asked = true;
+        let diff = Diff::parse_unified(DIFF_SRC);
+        Some(
+            PermissionRequest::new(
+                "Edit file",
+                "Do you want to proceed?",
+                vec![
+                    "Yes".to_string(),
+                    "Yes, during this session".to_string(),
+                    "No, and tell Claude what to do differently (esc)".to_string(),
+                ],
+            )
+            .target("crates/core/src/blocks.rs")
+            .source(r#"subagent "explore""#)
+            .diff(diff),
+        )
     }
 
     fn status(&self) -> String {

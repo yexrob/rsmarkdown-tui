@@ -18,6 +18,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Terminal;
 
 use crate::component::Component;
+use crate::permission::{DialogAction, PermissionDialog, PermissionRequest};
 use crate::renderer::theme;
 
 /// A small status badge shown in the host footer (Claude Code style:
@@ -120,6 +121,12 @@ pub struct App {
     mode: SessionMode,
     /// Demo pull-request badge (None hides it).
     pr: Option<(u32, PrStatus)>,
+    /// The open permission dialog, if any (modal: owns input while open).
+    permission: Option<PermissionDialog>,
+    /// Rect the dialog was drawn into last frame — mouse translation.
+    dialog_rect: ratatui::layout::Rect,
+    /// Completed dialog action awaiting the app owner.
+    dialog_action: Option<DialogAction>,
 }
 
 impl App {
@@ -133,6 +140,9 @@ impl App {
             content_area: ratatui::layout::Rect::default(),
             mode: SessionMode::default(),
             pr: None,
+            permission: None,
+            dialog_rect: ratatui::layout::Rect::default(),
+            dialog_action: None,
         }
     }
 
@@ -217,24 +227,47 @@ impl App {
         for badge in &badges {
             status.push(Span::styled(format!("  {}", badge.text), badge.style));
         }
-        status.push(Span::styled(format!(" {}", status_text), theme::text()));
-        if !hints.is_empty() {
-            status.push(Span::styled(format!(" {}", hints), theme::dim()));
-        }
-        if n > 1 {
+        if let Some(dialog) = &self.permission {
+            // modal: the dialog replaces the component status text and hints
             status.push(Span::styled(
-                "  [Tab] next  [m] mode  [q] quit",
+                format!(" {} — {}", dialog.request.title, dialog.request.question),
+                theme::permission(),
+            ));
+            status.push(Span::styled(
+                format!(
+                    " esc cancel · enter confirm · digits 1-{}",
+                    dialog.option_count()
+                ),
                 theme::dim(),
             ));
         } else {
-            status.push(Span::styled("  [m] mode  [q] quit", theme::dim()));
+            status.push(Span::styled(format!(" {}", status_text), theme::text()));
+            if !hints.is_empty() {
+                status.push(Span::styled(format!(" {}", hints), theme::dim()));
+            }
+            if n > 1 {
+                status.push(Span::styled(
+                    "  [Tab] next  [m] mode  [q] quit",
+                    theme::dim(),
+                ));
+            } else {
+                status.push(Span::styled("  [m] mode  [q] quit", theme::dim()));
+            }
         }
         buf.set_line(0, status_area.y, &Line::from(status), status_area.width);
+
+        // modal overlay: painted last so it covers the transcript
+        if let Some(dialog) = &mut self.permission {
+            self.dialog_rect = dialog.draw(content_area, buf);
+        }
     }
 
     /// Route one input event: focus translation for mouse, then the focused
     /// component, falling back to host keys. Returns `false` to quit.
     pub fn route(&mut self, event: Event) -> bool {
+        if self.permission.is_some() {
+            return self.route_dialog(event);
+        }
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 let consumed = {
@@ -271,10 +304,86 @@ impl App {
         }
     }
 
-    /// Advance the focused component by one tick.
+    /// Advance the focused component by one tick, then raise any permission
+    /// request it asks for (as a modal dialog).
     pub fn tick_components(&mut self) {
+        if self.permission.is_some() {
+            return; // modal: the dialog owns the session
+        }
         let focused = &mut self.components[self.focused];
         focused.on_tick();
+        if self.permission.is_none() {
+            if let Some(request) = focused.on_ask() {
+                self.ask(request);
+            }
+        }
+    }
+
+    /// Open a modal permission dialog (replaces one already open).
+    pub fn ask(&mut self, request: PermissionRequest) {
+        self.permission = Some(PermissionDialog::new(request));
+        self.dialog_action = None;
+        self.last_tick = Instant::now();
+    }
+
+    /// Whether a permission dialog is currently open (modal).
+    pub fn permission_open(&self) -> bool {
+        self.permission.is_some()
+    }
+
+    /// Rect the open dialog was drawn into last frame (mouse translation).
+    pub fn dialog_rect(&self) -> ratatui::layout::Rect {
+        self.dialog_rect
+    }
+
+    /// Last completed dialog action (the dialog itself has already closed).
+    /// Returns `None` if no dialog has completed since the last call.
+    pub fn take_dialog_action(&mut self) -> Option<DialogAction> {
+        self.dialog_action.take()
+    }
+
+    /// Route one event while the modal dialog owns the session: keys go to
+    /// the dialog, mouse clicks inside the dialog are translated to
+    /// dialog-local coordinates, clicks outside drop.
+    fn route_dialog(&mut self, event: Event) -> bool {
+        match event {
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                if let Some(action) = self.permission.as_mut().expect("dialog").key(key) {
+                    self.close_dialog(action);
+                }
+                true
+            }
+            Event::Mouse(m) => {
+                let r = self.dialog_rect;
+                let inside = m.column >= r.x
+                    && m.row >= r.y
+                    && m.column < r.x + r.width
+                    && m.row < r.y + r.height;
+                if inside {
+                    let local = MouseEvent {
+                        kind: m.kind,
+                        column: m.column - r.x,
+                        row: m.row - r.y,
+                        modifiers: m.modifiers,
+                    };
+                    if let Some(action) = self.permission.as_mut().expect("dialog").click(&local) {
+                        self.close_dialog(action);
+                    }
+                }
+                true
+            }
+            _ => true,
+        }
+    }
+
+    /// Close the dialog, notify the focused component, and record the action
+    /// for the app owner.
+    fn close_dialog(&mut self, action: DialogAction) {
+        self.dialog_action = Some(action);
+        self.permission = None;
+        let focused = &mut self.components[self.focused];
+        focused.on_dialog_closed(action);
+        self.last_tick = Instant::now();
     }
 
     /// Current session mode (tests).

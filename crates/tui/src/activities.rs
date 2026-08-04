@@ -247,8 +247,6 @@ pub enum DiffLine {
 
 /// One hunk of a unified diff.
 #[derive(Debug, Clone)]
-/// One hunk of a unified diff.
-
 pub struct Hunk {
     /// `@@ -a,b +c,d @@`
     /// `@@ -a,b +c,d @@`
@@ -259,8 +257,6 @@ pub struct Hunk {
 
 /// A file edit, rendered as a git-style unified diff.
 #[derive(Debug, Clone)]
-/// A file edit, rendered as a git-style unified diff.
-
 pub struct Diff {
     /// File path.
     pub path: String,
@@ -270,8 +266,6 @@ pub struct Diff {
 
 impl Diff {
     /// Count added / removed lines across all hunks.
-    /// Count added / removed lines across all hunks.
-
     pub fn stats(&self) -> (usize, usize) {
         let mut added = 0;
         let mut removed = 0;
@@ -366,10 +360,9 @@ fn hunk_line_text(line: &DiffLine) -> String {
 
 /// What a hint is about — the presentation differs, the foldable behavior
 /// does not.
-#[derive(Debug, Clone)]
 /// What an activity is about — the presentation differs, the foldable
 /// behavior does not.
-
+#[derive(Debug, Clone)]
 pub enum ActivityKind {
     /// A reasoning block.
     Thinking(Thinking),

@@ -48,6 +48,7 @@ pub mod app;
 pub mod component;
 pub mod components;
 pub mod image;
+pub mod permission;
 pub mod renderer;
 
 pub use activities::{

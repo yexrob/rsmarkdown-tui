@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use crate::app::FooterBadge;
+use crate::permission::{DialogAction, PermissionRequest};
 
 /// A renderable, interactive pane hosted by [`crate::App`].
 ///
@@ -44,4 +45,15 @@ pub trait Component {
     fn footer_badges(&self) -> Vec<FooterBadge> {
         Vec::new()
     }
+
+    /// A permission request this component wants to raise right now. The
+    /// host polls this each tick and opens a modal dialog when it returns
+    /// `Some`; the component learns the outcome through [`Self::on_dialog_closed`].
+    fn on_ask(&mut self) -> Option<PermissionRequest> {
+        None
+    }
+
+    /// The modal permission dialog was closed with this action (only called
+    /// if a dialog was actually open).
+    fn on_dialog_closed(&mut self, _action: DialogAction) {}
 }

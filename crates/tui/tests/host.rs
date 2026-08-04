@@ -42,6 +42,9 @@ fn setup() -> (App, Terminal<TestBackend>) {
     for _ in 0..300 {
         app.tick_components();
     }
+    // the demo turn raises the permission dialog at the end; dismiss it so
+    // the transcript is interactive again
+    app.route(Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)));
     // tall terminal: the conversation fits without scrolling, so absolute
     // click rows map 1:1 to document rows
     let mut terminal = Terminal::new(TestBackend::new(160, 300)).expect("test backend");

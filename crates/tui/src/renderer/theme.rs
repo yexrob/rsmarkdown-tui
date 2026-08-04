@@ -172,3 +172,15 @@ pub fn status() -> Style {
 pub fn status_inactive() -> Style {
     Style::default().fg(Color::DarkGray)
 }
+/// Permission dialog title / accent (Claude's `permission` semantic color).
+pub fn permission() -> Style {
+    Style::default()
+        .fg(Color::LightYellow)
+        .add_modifier(Modifier::BOLD)
+}
+/// Selected option `❯` marker in the permission dialog.
+pub fn permission_selected() -> Style {
+    Style::default()
+        .fg(Color::LightYellow)
+        .add_modifier(Modifier::BOLD)
+}
