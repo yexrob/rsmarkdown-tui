@@ -182,6 +182,28 @@ fn dialog_draws_title_target_question_and_options() {
 }
 
 #[test]
+fn tiny_window_clips_dialog_instead_of_panicking() {
+    // regression: a 6-row terminal window used to overflow the buffer
+    // (index outside of buffer at (2, 6))
+    let (mut app, _state) = probe_app();
+    app.ask(edit_request());
+    for height in [1u16, 2, 3, 4, 5, 6] {
+        for width in [1u16, 4, 20, 80, 106, 160] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("backend");
+            terminal
+                .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+                .expect("draw");
+            // the dialog must fit inside the frame (or be skipped entirely)
+            let r = app.dialog_rect();
+            assert!(
+                r.width <= width && r.height <= height,
+                "dialog inside frame"
+            );
+        }
+    }
+}
+
+#[test]
 fn overlay_background_separates_from_transcript() {
     let (mut app, _state) = probe_app();
     app.ask(edit_request());

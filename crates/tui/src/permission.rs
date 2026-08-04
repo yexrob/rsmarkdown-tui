@@ -111,6 +111,13 @@ pub struct PermissionDialog {
     pub theme: Theme,
 }
 
+/// Draw one row of the dialog, clipped to the panel's inner bottom edge.
+fn draw_row(buf: &mut Buffer, bottom: u16, x: u16, y: u16, line: &Line<'_>, width: u16) {
+    if y < bottom {
+        buf.set_line(x, y, line, width);
+    }
+}
+
 impl PermissionDialog {
     /// Open a dialog for the given request (first option selected).
     pub fn new(request: PermissionRequest) -> Self {
@@ -249,9 +256,14 @@ impl PermissionDialog {
         block.render(rect, buf);
         self.last_rect = rect;
 
+        // every content row is clamped to the inner rect: a very short
+        // terminal window must clip the dialog, never overflow the buffer
+        let bottom = inner.y + inner.height;
         let mut y = inner.y;
         if let Some(target) = &self.request.target {
-            buf.set_line(
+            draw_row(
+                buf,
+                bottom,
                 inner.x + 2,
                 y,
                 &Line::from(Span::styled(target, self.theme.dim())),
@@ -260,7 +272,9 @@ impl PermissionDialog {
             y += 1;
         }
         if let Some(source) = &self.request.source {
-            buf.set_line(
+            draw_row(
+                buf,
+                bottom,
                 inner.x + 2,
                 y,
                 &Line::from(vec![
@@ -272,11 +286,20 @@ impl PermissionDialog {
             y += 1;
         }
         for line in self.request.content.iter().take(content_rows) {
-            buf.set_line(inner.x + 1, y, line, inner.width.saturating_sub(1));
+            draw_row(
+                buf,
+                bottom,
+                inner.x + 1,
+                y,
+                line,
+                inner.width.saturating_sub(1),
+            );
             y += 1;
         }
         if content_count > CONTENT_CAP {
-            buf.set_line(
+            draw_row(
+                buf,
+                bottom,
                 inner.x + 2,
                 y,
                 &Line::from(Span::styled(
@@ -288,7 +311,9 @@ impl PermissionDialog {
             y += 1;
         }
         // question
-        buf.set_line(
+        draw_row(
+            buf,
+            bottom,
             inner.x + 2,
             y,
             &Line::from(Span::styled(
@@ -313,7 +338,9 @@ impl PermissionDialog {
                 ),
                 Span::styled(format!("{}. {}", i + 1, option), self.theme.text()),
             ];
-            buf.set_line(
+            draw_row(
+                buf,
+                bottom,
                 inner.x + 2,
                 y,
                 &Line::from(spans),
