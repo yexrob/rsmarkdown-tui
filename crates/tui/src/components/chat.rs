@@ -646,6 +646,7 @@ impl AgentChat {
                         },
                         summary: "-n parse_markdown_into_blocks crates/core/src/blocks.rs"
                             .to_string(),
+                        result_summary: None,
                         duration_ms: ((p * 600.0) as u64),
                         output: if p >= 0.8 {
                             Some("blocks.rs:24".to_string())
@@ -740,6 +741,7 @@ impl AgentChat {
                         summary: tools[*index].summary.to_string(),
                         duration_ms: tools[*index].duration_ms,
                         output: Some(tools[*index].preview.to_string()),
+                        result_summary: None,
                     }));
                     hint.set_content(
                         tools[*index]

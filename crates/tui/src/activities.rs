@@ -47,17 +47,14 @@ pub struct ToolCall {
     /// Running / done / error.
     pub status: ToolStatus,
     /// Brief command / argument summary.
-    /// Brief command / argument summary.
     pub summary: String,
     /// Elapsed time in milliseconds.
-
-    /// Elapsed time in milliseconds.
-
-    /// Elapsed time in milliseconds.
     pub duration_ms: u64,
-    /// One-line output preview shown next to the header.
     /// One-line output preview shown in the header.
     pub output: Option<String>,
+    /// One-line result summary shown under the header when expanded
+    /// (Claude Code: `⎿ Read 173 lines`). Rendered before `content`.
+    pub result_summary: Option<String>,
 }
 
 impl ToolCall {
@@ -70,6 +67,7 @@ impl ToolCall {
             summary: summary.into(),
             duration_ms: 0,
             output: None,
+            result_summary: None,
         }
     }
 }
@@ -767,17 +765,28 @@ fn activity_layout(
                 }
             }
             _ => {
+                let mut content_lines = 0;
+                if let ActivityKind::Tool(t) = &act.kind {
+                    if let Some(summary) = &t.result_summary {
+                        rows.push(prepend_line(
+                            &Line::from(summary.clone()),
+                            &format!("{}⎿ ", cont),
+                            theme,
+                        ));
+                        content_lines += 1;
+                    }
+                }
                 for (i, line) in act.content.iter().enumerate() {
                     // the first content line connects with `⎿` (Claude Code's
                     // result connector); the rest stay indented
-                    let p = if i == 0 {
+                    let p = if i == 0 && content_lines == 0 {
                         format!("{}⎿ ", cont)
                     } else {
                         format!("{}  ", cont)
                     };
                     rows.push(prepend_line(line, &p, theme));
                 }
-                cursor += act.content.len() as u16;
+                cursor += content_lines + act.content.len() as u16;
             }
         }
     }
@@ -934,6 +943,7 @@ mod tests {
             summary: "cargo test -p core".into(),
             duration_ms: 12,
             output: Some("54 passed".into()),
+            result_summary: None,
         }));
         h.set_content(vec![
             Line::styled("$ cargo test -p core", Style::default()),
@@ -1127,6 +1137,7 @@ mod tests {
                         summary: "-n parse".into(),
                         duration_ms: 10,
                         output: Some("blocks.rs:24".into()),
+                        result_summary: None,
                     }));
                     g.set_content(vec![Line::styled("blocks.rs:24: found", Style::default())]);
                     g.expanded = true;
