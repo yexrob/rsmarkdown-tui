@@ -38,6 +38,15 @@
 5. **Agent 总览屏**:独立组件,分组状态表(复用 activity 状态模型)
 6. **语义色 token 化**:theme.rs 收敛为 token 函数 + 主题切换
 
+## 进展
+
+- [x] **① 层级符号 + 折叠摘要尾**:`⏺` 主活动圆点(Tool/SubAgent/Diff)、`⎿` 结果连接符(首行内容)、`├─/└─` 嵌套树枝 + `│` 延续、折叠摘要尾 `… +N lines (click to expand)` / `N steps (click to expand)` / diff `(click to expand)`
+- [ ] ② Footer 徽标系统
+- [ ] ③ 权限确认框
+- [ ] ④ `/` 命令菜单 + `?` 帮助面板
+- [ ] ⑤ Agent 总览屏
+- [ ] ⑥ 语义色 token 化
+
 ## 验收锚点
 
 - 每个视觉元素对照报告中的【文档事实】条目实现,不确定处标注

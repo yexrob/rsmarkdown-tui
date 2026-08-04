@@ -85,6 +85,12 @@ pub fn thinking() -> Style {
         .fg(Color::DarkGray)
         .add_modifier(Modifier::ITALIC)
 }
+/// The `⏺` main-activity dot (Claude's accent color).
+pub fn activity_dot() -> Style {
+    Style::default()
+        .fg(Color::LightCyan)
+        .add_modifier(Modifier::BOLD)
+}
 pub fn tool_running() -> Style {
     Style::default()
         .fg(Color::LightCyan)

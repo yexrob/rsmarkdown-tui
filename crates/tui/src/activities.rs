@@ -508,6 +508,41 @@ fn indent_line(line: &Line<'static>, depth: usize) -> Line<'static> {
 
 /// Recursive layout of one activity: header + (expanded) content or nested
 /// transcript, plus clickable ranges for every visible activity.
+/// Fold-summary tail for collapsed-but-expandable activities (Claude Code's
+/// `… +6 lines (ctrl+o to expand)` affordance, adapted to mouse clicks).
+fn fold_tail(act: &Activity) -> Option<String> {
+    if act.expanded {
+        return None;
+    }
+    match &act.kind {
+        ActivityKind::Tool(_) if !act.content.is_empty() => {
+            Some(format!("… +{} lines (click to expand)", act.content.len()))
+        }
+        ActivityKind::SubAgent(a)
+            if a.status == SubAgentStatus::Done && !a.transcript.is_empty() =>
+        {
+            Some(format!("{} steps (click to expand)", a.transcript.len()))
+        }
+        ActivityKind::Diff(d) if !d.hunks.is_empty() => {
+            // header already carries the +A −R stats
+            Some("(click to expand)".to_string())
+        }
+        _ => None,
+    }
+}
+
+/// Prepend `prefix` to the first span of a line.
+fn prepend_line(line: &Line<'static>, prefix: &str) -> Line<'static> {
+    let mut spans = Vec::with_capacity(line.spans.len() + 1);
+    spans.push(Span::styled(prefix.to_string(), theme::tool_output()));
+    spans.extend(line.spans.iter().cloned());
+    Line::from(spans)
+}
+
+/// Recursive layout of one activity. `depth == 0` marks message-level
+/// activities (they get the `⏺` dot); deeper levels render as a tree with
+/// `├─`/`└─` branches. `prefix` is applied to the header row, `cont` to the
+/// content rows of this level.
 fn activity_layout(
     act: &Activity,
     path: &[usize],
@@ -515,16 +550,40 @@ fn activity_layout(
     base_row: u16,
     spinner: char,
     render_reply: &mut dyn FnMut(&str) -> Vec<Line<'static>>,
+    depth: usize,
+    prefix: &str,
+    cont: &str,
 ) -> (Vec<Line<'static>>, Vec<ActivityRowRange>) {
-    let mut rows = vec![header_for(act, spinner)];
+    let mut header = header_for(act, spinner);
+    if depth == 0 {
+        // main-level activity dot (Claude Code: `⏺ Read(.mcp.json)`)
+        if matches!(
+            act.kind,
+            ActivityKind::Tool(_) | ActivityKind::SubAgent(_) | ActivityKind::Diff(_)
+        ) {
+            header
+                .spans
+                .insert(0, Span::styled("⏺ ", theme::activity_dot()));
+        }
+    }
+    if let Some(tail) = fold_tail(act) {
+        header
+            .spans
+            .push(Span::styled(format!(" {}", tail), theme::dim()));
+    }
+    let mut rows = vec![prepend_line(&header, prefix)];
     let mut cursor = base_row + 1;
     let mut ranges = Vec::new();
     if act.expanded {
         match &act.kind {
             ActivityKind::SubAgent(a) => {
+                let n = a.transcript.len();
                 for (j, nested) in a.transcript.iter().enumerate() {
                     let mut nested_path = path.to_vec();
                     nested_path.push(j);
+                    let last = j == n - 1;
+                    let branch = if last { "└─ " } else { "├─ " };
+                    let child_cont = if last { "   " } else { "│  " };
                     let (lines, nested_ranges) = activity_layout(
                         nested,
                         &nested_path,
@@ -532,9 +591,12 @@ fn activity_layout(
                         cursor,
                         spinner,
                         render_reply,
+                        depth + 1,
+                        branch,
+                        child_cont,
                     );
                     for line in &lines {
-                        rows.push(indent_line(line, 2));
+                        rows.push(prepend_line(line, cont));
                     }
                     cursor += lines.len() as u16;
                     ranges.extend(nested_ranges);
@@ -542,14 +604,21 @@ fn activity_layout(
                 if !a.reply.is_empty() {
                     let reply = render_reply(&a.reply);
                     for line in &reply {
-                        rows.push(indent_line(line, 2));
+                        rows.push(prepend_line(line, &format!("{}  ", cont)));
                     }
                     cursor += reply.len() as u16;
                 }
             }
             _ => {
-                for line in &act.content {
-                    rows.push(indent_line(line, 2));
+                for (i, line) in act.content.iter().enumerate() {
+                    // the first content line connects with `⎿` (Claude Code's
+                    // result connector); the rest stay indented
+                    let p = if i == 0 {
+                        format!("{}⎿ ", cont)
+                    } else {
+                        format!("{}  ", cont)
+                    };
+                    rows.push(prepend_line(line, &p));
                 }
                 cursor += act.content.len() as u16;
             }
@@ -580,8 +649,17 @@ pub fn layout_activities(
     let mut ranges = Vec::new();
     let mut doc_row = base_row;
     for (i, act) in acts.iter().enumerate() {
-        let (lines, mut local) =
-            activity_layout(act, &[i], message, doc_row, spinner, render_reply);
+        let (lines, mut local) = activity_layout(
+            act,
+            &[i],
+            message,
+            doc_row,
+            spinner,
+            render_reply,
+            0,
+            "",
+            "",
+        );
         doc_row += lines.len() as u16;
         rows.extend(lines);
         ranges.append(&mut local);
@@ -611,7 +689,7 @@ pub fn activities_path_get_mut<'a>(
 /// plain content) — used by tests and simple displays.
 pub fn activity_lines(h: &Activity, spinner: char) -> Vec<Line<'static>> {
     let mut render = |_: &str| Vec::new();
-    let (rows, _) = activity_layout(h, &[0], 0, 0, spinner, &mut render);
+    let (rows, _) = activity_layout(h, &[0], 0, 0, spinner, &mut render, 0, "", "");
     rows
 }
 
@@ -684,7 +762,7 @@ mod tests {
         let lines = activity_lines(&h, '⠙');
         assert_eq!(
             text(&lines[0]),
-            "✓ bash cargo test -p core · 12ms · 54 passed"
+            "⏺ ✓ bash cargo test -p core · 12ms · 54 passed … +2 lines (click to expand)"
         );
 
         h.toggle();
@@ -777,6 +855,67 @@ mod tests {
         assert!(text(&lines[1]).starts_with(" ctx"), "{}", text(&lines[1]));
         assert!(text(&lines[2]).starts_with("-old"), "{}", text(&lines[2]));
         assert!(text(&lines[3]).starts_with("+new"), "{}", text(&lines[3]));
+    }
+
+    #[test]
+    fn hierarchy_symbols_and_tree() {
+        // a done subagent with a nested transcript renders as a tree
+        let mut sub = Activity::new(ActivityKind::SubAgent(SubAgent {
+            name: "explore".into(),
+            status: SubAgentStatus::Done,
+            task: "Find the parser".into(),
+            duration_ms: 1200,
+            result: Some("found it".into()),
+            transcript: vec![
+                {
+                    let mut g = Activity::new(ActivityKind::Tool(ToolCall {
+                        name: "grep",
+                        status: ToolStatus::Done,
+                        summary: "-n parse".into(),
+                        duration_ms: 10,
+                        output: Some("blocks.rs:24".into()),
+                    }));
+                    g.set_content(vec![Line::styled("blocks.rs:24: found", Style::default())]);
+                    g.expanded = true;
+                    g
+                },
+                Activity::new(ActivityKind::Thinking(Thinking {
+                    state: ThinkingState::Done,
+                    duration_ms: 300,
+                    digest: Some("scanning".into()),
+                    stage: "scan",
+                })),
+            ],
+            reply: String::new(),
+        }));
+        sub.expanded = true;
+        let lines = activity_lines(&sub, '⠋');
+        assert!(
+            text(&lines[0]).starts_with("⏺ ✓ explore (Find the parser)"),
+            "{}",
+            text(&lines[0])
+        );
+        // tree branches
+        assert!(
+            text(&lines[1]).starts_with("├─ ✓ grep"),
+            "{}",
+            text(&lines[1])
+        );
+        assert!(text(&lines[2]).starts_with("│  ⎿ "), "{}", text(&lines[2]));
+        assert!(
+            text(&lines[3]).starts_with("└─ ─ thinking"),
+            "{}",
+            text(&lines[3])
+        );
+
+        // collapsed: fold tail counts the steps
+        sub.expanded = false;
+        let lines = activity_lines(&sub, '⠋');
+        assert!(
+            text(&lines[0]).contains("2 steps (click to expand)"),
+            "{}",
+            text(&lines[0])
+        );
     }
 
     #[test]
