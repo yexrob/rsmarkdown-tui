@@ -973,7 +973,7 @@ impl Component for AgentChat {
             )
             .target("crates/core/src/blocks.rs")
             .source(r#"subagent "explore""#)
-            .diff(diff),
+            .content(activities::diff_lines(&diff)),
         )
     }
 

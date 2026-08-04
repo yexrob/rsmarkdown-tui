@@ -14,7 +14,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::Terminal;
 
-use rsmarkdown_tui::activities::Diff;
+use rsmarkdown_tui::activities::{diff_lines, Diff};
 use rsmarkdown_tui::permission::{DialogAction, PermissionRequest};
 use rsmarkdown_tui::{App, Component};
 
@@ -111,7 +111,7 @@ fn edit_request() -> PermissionRequest {
     )
     .target("crates/core/src/blocks.rs")
     .source(r#"subagent "explore""#)
-    .diff(Diff::parse_unified(EDIT_DIFF))
+    .content(diff_lines(&Diff::parse_unified(EDIT_DIFF)))
 }
 
 const EDIT_DIFF: &str = "--- a/crates/core/src/blocks.rs\n\
@@ -299,21 +299,21 @@ fn component_on_ask_opens_dialog_via_tick() {
 }
 
 #[test]
-fn long_diff_gets_tail_and_stays_bounded() {
+fn long_content_gets_tail_and_stays_bounded() {
     let mut diff_text = String::from("--- a/x.rs\n+++ b/x.rs\n@@ -1,30 +1,30 @@\n");
     for i in 0..30 {
         diff_text.push_str(&format!(" context line {}\n", i));
     }
     let mut req = edit_request();
-    req.diff = Some(Diff::parse_unified(&diff_text));
+    req.content = diff_lines(&Diff::parse_unified(&diff_text));
     let (mut app, _state) = probe_app();
     app.ask(req);
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");
     let rows = draw(&mut app, &mut terminal);
     assert!(
         rows.iter().any(|r| r.contains("… +23 more")),
-        "diff tail with count"
+        "content tail with count"
     );
     let dialog_rows = rows.iter().filter(|r| r.contains("context line")).count();
-    assert_eq!(dialog_rows, 7, "8 diff rows capped (incl. @@ header)");
+    assert_eq!(dialog_rows, 7, "8 content rows capped (incl. @@ header)");
 }

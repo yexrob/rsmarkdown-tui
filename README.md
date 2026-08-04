@@ -168,7 +168,7 @@ custom component with `+`/`-` interaction and a footer badge.
 
 ## Permission dialog
 
-`App::ask` (or a component's `on_ask`) raises a Claude Code style modal: numbered options with a `❯` selection marker, `Esc` to cancel, Enter / digit / double-click to confirm, and an optional diff preview (reuses the activity diff renderer, capped at 8 rows).
+`App::ask` (or a component's `on_ask`) raises a Claude Code style modal: numbered options with a `❯` selection marker, `Esc` to cancel, Enter / digit / double-click to confirm, and an optional pre-rendered content preview — the caller supplies styled lines, so the demo feeds it with the activity diff renderer (capped at 8 rows).
 
 ## Performance
 

@@ -18,7 +18,6 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
 
-use crate::activities::{diff_lines, Diff};
 use crate::renderer::theme;
 
 /// Outcome of the dialog: an option was chosen, or it was dismissed.
@@ -31,7 +30,8 @@ pub enum DialogAction {
 }
 
 /// A permission request to show: title, target summary, question, numbered
-/// options, and an optional diff preview / requesting agent.
+/// options, and optional pre-rendered content preview (e.g. the diff being
+/// reviewed).
 #[derive(Debug, Clone)]
 pub struct PermissionRequest {
     /// Dialog title, e.g. `Read file` / `Edit file`.
@@ -44,9 +44,10 @@ pub struct PermissionRequest {
     pub question: String,
     /// Numbered options (numbers are added automatically).
     pub options: Vec<String>,
-    /// Optional diff preview rendered above the question (reuses the
-    /// activity diff renderer).
-    pub diff: Option<Diff>,
+    /// Pre-rendered content preview, drawn verbatim above the question.
+    /// The caller supplies already-styled lines — the demo, for example,
+    /// feeds this with [`crate::activities::diff_lines`].
+    pub content: Vec<Line<'static>>,
 }
 
 impl PermissionRequest {
@@ -62,7 +63,7 @@ impl PermissionRequest {
             source: None,
             question: question.into(),
             options,
-            diff: None,
+            content: Vec::new(),
         }
     }
 
@@ -78,15 +79,16 @@ impl PermissionRequest {
         self
     }
 
-    /// Attach a diff preview.
-    pub fn diff(mut self, diff: Diff) -> Self {
-        self.diff = Some(diff);
+    /// Attach pre-rendered content lines (drawn above the question).
+    pub fn content(mut self, lines: Vec<Line<'static>>) -> Self {
+        self.content = lines;
         self
     }
 }
 
-/// Max diff preview rows inside the dialog; longer diffs get a `… +N more` tail.
-pub const DIFF_CAP: usize = 8;
+/// Max content preview rows inside the dialog; longer content gets a
+/// `… +N more` tail.
+pub const CONTENT_CAP: usize = 8;
 
 /// The open modal: a request plus the current selection.
 pub struct PermissionDialog {
@@ -184,18 +186,13 @@ impl PermissionDialog {
     /// rect actually used (the host translates mouse events through it).
     pub fn draw(&mut self, area: Rect, buf: &mut Buffer) -> Rect {
         let width = area.width.min(72);
-        let diff_count = self
-            .request
-            .diff
-            .as_ref()
-            .map(|d| diff_lines(d).len())
-            .unwrap_or(0);
-        let diff_rows = diff_count.min(DIFF_CAP);
-        let extra = if diff_count > DIFF_CAP { 1 } else { 0 };
+        let content_count = self.request.content.len();
+        let content_rows = content_count.min(CONTENT_CAP);
+        let extra = if content_count > CONTENT_CAP { 1 } else { 0 };
         let rows = 2
             + usize::from(self.request.target.is_some())
             + usize::from(self.request.source.is_some())
-            + diff_rows
+            + content_rows
             + extra
             + 1 // question
             + self.option_count()
@@ -242,24 +239,21 @@ impl PermissionDialog {
             );
             y += 1;
         }
-        if let Some(diff) = &self.request.diff {
-            let lines = diff_lines(diff);
-            for line in lines.iter().take(diff_rows) {
-                buf.set_line(inner.x + 1, y, line, inner.width.saturating_sub(1));
-                y += 1;
-            }
-            if diff_count > DIFF_CAP {
-                buf.set_line(
-                    inner.x + 2,
-                    y,
-                    &Line::from(Span::styled(
-                        format!("… +{} more", diff_count - diff_rows),
-                        theme::dim(),
-                    )),
-                    inner.width.saturating_sub(2),
-                );
-                y += 1;
-            }
+        for line in self.request.content.iter().take(content_rows) {
+            buf.set_line(inner.x + 1, y, line, inner.width.saturating_sub(1));
+            y += 1;
+        }
+        if content_count > CONTENT_CAP {
+            buf.set_line(
+                inner.x + 2,
+                y,
+                &Line::from(Span::styled(
+                    format!("… +{} more", content_count - content_rows),
+                    theme::dim(),
+                )),
+                inner.width.saturating_sub(2),
+            );
+            y += 1;
         }
         // question
         buf.set_line(
