@@ -48,27 +48,44 @@ ported one-to-one from `markmend/core/src/preprocess/*.ts`, including
 exclusions (markers inside code blocks, URLs, math, HTML tags) and removal
 fallbacks for bare markers.
 
-### `rsmarkdown-tui`
+### `rsmarkdown-tui` — a component TUI framework
+
+The TUI is a small component framework, not a markdown viewer:
+
+```
+crates/tui/src/
+  component.rs        Component trait (draw / event / on_tick / status / hints)
+  app.rs              App host: event loop, focus routing, status bar
+  components/         pluggable panes:
+    markdown.rs         streaming markdown viewer (uses rsmarkdown-core)
+    text.rs             plain-text streaming log (non-markdown component)
+    list.rs             selectable task list (interactive component)
+  renderer/           StreamMarkdownRenderer: AST -> styled lines (per-block cache)
+```
 
 `StreamMarkdownRenderer` implements `rsmarkdown_core::Renderer`: it converts
 each block's AST into styled terminal lines with **per-block caching** — only
 blocks whose source changed are re-rendered, mirroring the original's memoized
-`Block` components.
+`Block` components. Any component can be mounted into the host.
 
 ```
 cargo run -p rsmarkdown-tui
 ```
 
-- streams a demo document chunk-by-chunk (simulated LLM output)
-- `t` — type markdown yourself; watch unclosed `**bold`, fences, tables, task
-  lists get completed live
-- `d`/`r` — restart demo, `j/k/PgUp/PgDn/g/G`/mouse wheel — scroll,
-  `s` — auto-scroll, `q` — quit
+- `[1] markdown` — streams a demo document chunk-by-chunk (simulated LLM
+  output); `t` types markdown yourself and watches unclosed `**bold`, fences,
+  tables, task lists get completed live; `p` loads a ~200 KB stress document
+- `[2] log` — a streaming plain-text log (proves rendering is not
+  markdown-specific)
+- `[3] tasks` — a selectable task list (`space` toggles)
+- `Tab` / `[` `]` / `1-3` switch focus, `j/k/PgUp/PgDn/g/G`/mouse wheel scroll,
+  `s` auto-scroll, `q` quits
 
-A headless check of the full pipeline (no terminal):
+Headless checks (no terminal required):
 
 ```
-cargo run -p rsmarkdown-tui --example headless
+cargo run -p rsmarkdown-tui --example headless   # full markdown pipeline
+cargo test -p rsmarkdown-tui                     # incl. component smoke tests
 ```
 
 ## Performance
