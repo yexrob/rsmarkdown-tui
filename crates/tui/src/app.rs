@@ -402,12 +402,13 @@ impl App {
     /// the merged table via [`Component::absorb_agents`]), then raise any
     /// permission request the focused component asks for.
     pub fn tick_components(&mut self) {
-        if self.permission.is_some() {
-            return; // modal: the dialog owns the session
-        }
+        // 组件 tick 始终推进（动画/计时不因模态冻结）。
         {
             let focused = &mut self.components[self.focused];
             focused.on_tick();
+        }
+        if self.permission.is_some() {
+            return; // modal: the dialog owns the session
         }
         // agent broadcast: merge every component's sessions by name (last
         // publisher wins) and deliver to all components

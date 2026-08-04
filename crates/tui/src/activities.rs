@@ -577,12 +577,11 @@ fn diff_header(d: &Diff, theme: &Theme) -> Line<'static> {
 }
 
 fn thinking_header(t: &Thinking, spinner: char, theme: &Theme) -> Line<'static> {
-    let _ = spinner; // Claude Code 用静态 ✻ 标记
     match t.state {
-        // 运行态（Claude Code: `✻ Choreographing… (4s · thinking with xhigh effort)`）
+        // 运行态（Claude Code: `✻ Choreographing… (4s · thinking)`；spinner 提供动效）
         ThinkingState::Running => {
             let mut spans = vec![Span::styled(
-                format!("✻ {}…", t.stage),
+                format!("✻ {spinner} {}…", t.stage),
                 theme.thinking(),
             )];
             let stats = format!("{:.1}s · thinking", t.duration_ms as f64 / 1000.0);
@@ -902,7 +901,7 @@ mod tests {
         let h = thinking("understand", ThinkingState::Running);
         assert!(!h.expandable());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "✻ understand… (2.3s · thinking)");
+        assert_eq!(text(&lines[0]), "✻ ⠋ understand… (2.3s · thinking)");
     }
 
     #[test]
