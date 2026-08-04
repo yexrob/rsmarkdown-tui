@@ -540,6 +540,7 @@ impl AgentChat {
                     digest: None,
                     stage: "understand",
                     tokens: None,
+                    start_tick: 0,
                 }));
                 hint.set_content(Self::reasoning_lines(&REASONING_UNDERSTAND, progress));
                 self.push_hint(hint);
@@ -550,6 +551,7 @@ impl AgentChat {
                         digest: Some("understanding the request".to_string()),
                         stage: "understand",
                     tokens: None,
+                    start_tick: 0,
                     }));
                     hint.set_content(
                         REASONING_UNDERSTAND
@@ -625,6 +627,7 @@ impl AgentChat {
                         digest: Some("scanning blocks.rs".to_string()),
                         stage: "scan",
                     tokens: None,
+                    start_tick: 0,
                     }));
                     thinking.set_content(vec![
                         Line::styled("Looking for parse_markdown_into_blocks…", Style::default()),
@@ -803,6 +806,7 @@ impl AgentChat {
                     digest: None,
                     stage: "compose",
                     tokens: None,
+                    start_tick: 0,
                 }));
                 hint.set_content(Self::reasoning_lines(&REASONING_COMPOSE, progress));
                 self.push_hint(hint);
@@ -813,6 +817,7 @@ impl AgentChat {
                         digest: Some("composing the reply".to_string()),
                         stage: "compose",
                     tokens: None,
+                    start_tick: 0,
                     }));
                     hint.set_content(
                         REASONING_COMPOSE

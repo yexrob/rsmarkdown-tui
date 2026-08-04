@@ -103,6 +103,8 @@ pub struct Thinking {
     pub stage: &'static str,
     /// Output tokens consumed so far (Claude Code: down-arrow N tokens).
     pub tokens: Option<u64>,
+    /// Host-side tick at which this block started (per-block elapsed timer).
+    pub start_tick: u64,
 }
 
 /// Todo lifecycle (mirrors Claude Code: pending -> in_progress -> completed).
@@ -870,6 +872,7 @@ mod tests {
             },
             stage,
             tokens: None,
+            start_tick: 0,
         }));
         if state == ThinkingState::Done {
             h.set_content(vec![Line::styled("reasoning line", Style::default())]);
@@ -1116,6 +1119,7 @@ mod tests {
                     digest: Some("scanning".into()),
                     stage: "scan",
                     tokens: Some(147),
+            start_tick: 0,
                 })),
             ],
             reply: String::new(),
