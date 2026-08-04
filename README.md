@@ -211,6 +211,17 @@ dialogs all paint through the same tokens.
 
 ## Performance
 
+Core: 7x faster than the JS original (per-block cache, find-based rewrites).
+
+Chat component (criterion, release): a full scripted turn costs ~60µs,
+a single frame at 100×40 ~45µs, a frame over an 11-turn transcript
+~160µs — all under 1% of the 33ms tick budget. Run:
+
+```
+cargo bench -p rsmarkdown-core
+cargo bench -p rsmarkdown-tui --bench chat
+```
+
 Two tools:
 
 ```
