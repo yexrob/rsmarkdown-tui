@@ -826,6 +826,25 @@ pub fn layout_activities(
     (rows, ranges)
 }
 
+/// Layout a single activity into rows + a clickable range.
+///
+/// Hosts that interleave activity rows with markdown text rows (Claude
+/// Code order: text and tool calls interleaved per model output) call
+/// this per activity; `base_row` is the current row offset.
+pub fn layout_activity(
+    act: &Activity,
+    path: &[usize],
+    message: usize,
+    base_row: u16,
+    spinner: char,
+    theme: &Theme,
+    render_reply: &mut dyn FnMut(&str) -> Vec<Line<'static>>,
+) -> (Vec<Line<'static>>, Vec<ActivityRowRange>) {
+    activity_layout(
+        act, path, message, base_row, spinner, theme, render_reply, 0, "", "",
+    )
+}
+
 /// Walk a path into (possibly nested subagent) activities and return the
 /// addressed activity, mutably.
 pub fn activities_path_get_mut<'a>(
