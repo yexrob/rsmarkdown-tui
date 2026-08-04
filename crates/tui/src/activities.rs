@@ -92,6 +92,7 @@ pub enum WatchStatus {
 pub struct WatchCall {
     /// 描述（如 `watch -n 2 ls`、`subagent: 读取文档`）。
     pub label: String,
+    /// 生命周期状态。
     pub status: WatchStatus,
     /// 当前轮次/进度描述（如 `第 3 轮 · 输出 12 行`）。
     pub detail: Option<String>,
@@ -100,6 +101,7 @@ pub struct WatchCall {
 }
 
 impl WatchCall {
+    /// 启动一个正在执行的 watchable。
     pub fn running(label: impl Into<String>) -> Self {
         Self {
             label: label.into(),
