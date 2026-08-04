@@ -72,6 +72,40 @@ impl ToolCall {
     }
 }
 
+/// Watchable 生命周期状态（宿主 app 的 watch 机制透传）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchStatus {
+    Running,
+    /// 一轮完成（周期命令的轮次边界）。
+    Idle,
+    Done,
+    Failed,
+    Cancelled,
+}
+
+/// 一个被 watch 的实体（命令/agent 等）：header + 轮次 detail + 可展开内容。
+#[derive(Debug, Clone)]
+pub struct WatchCall {
+    /// 描述（如 `watch -n 2 ls`、`subagent: 读取文档`）。
+    pub label: String,
+    pub status: WatchStatus,
+    /// 当前轮次/进度描述（如 `第 3 轮 · 输出 12 行`）。
+    pub detail: Option<String>,
+    /// 已运行毫秒。
+    pub duration_ms: u64,
+}
+
+impl WatchCall {
+    pub fn running(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            status: WatchStatus::Running,
+            detail: None,
+            duration_ms: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Whether a reasoning block is still running.
 
@@ -238,6 +272,8 @@ pub fn auto_expand(h: &Activity) -> bool {
         ActivityKind::Tool(t) => t.status == ToolStatus::Running,
         ActivityKind::SubAgent(a) => a.status == SubAgentStatus::Running,
         ActivityKind::Todo(_) | ActivityKind::Diff(_) => false,
+        // Watch 由宿主驱动展开（轮次 detail 常驻 header，不自动展开）。
+        ActivityKind::Watch(_) => false,
     }
 }
 
@@ -380,6 +416,8 @@ pub enum ActivityKind {
     Todo(TodoList),
     /// A file edit, shown as a unified diff.
     Diff(Diff),
+    /// A watched entity (command / agent) with lifecycle status.
+    Watch(WatchCall),
 }
 
 impl ActivityKind {
@@ -391,6 +429,7 @@ impl ActivityKind {
             ActivityKind::SubAgent(a) => ActivityId::SubAgent(a.name.clone()),
             ActivityKind::Todo(t) => ActivityId::Todo(t.title.clone()),
             ActivityKind::Diff(d) => ActivityId::Diff(d.path.clone()),
+            ActivityKind::Watch(w) => ActivityId::Watch(w.label.clone()),
         }
     }
 }
@@ -402,6 +441,7 @@ pub(crate) enum ActivityId {
     SubAgent(String),
     Todo(String),
     Diff(String),
+    Watch(String),
 }
 
 /// A foldable agent hint. Both thinking blocks and tool calls are this one
@@ -651,7 +691,29 @@ fn header_for(h: &Activity, spinner: char, theme: &Theme) -> Line<'static> {
         ActivityKind::SubAgent(a) => subagent_header(a, spinner, theme),
         ActivityKind::Todo(t) => todo_header(t, spinner, theme),
         ActivityKind::Diff(d) => diff_header(d, theme),
+        ActivityKind::Watch(w) => watch_header(w, spinner, theme),
     }
+}
+
+/// `⠋ watch -n 2 ls`（轮间 `⏸`）→ `✓ watch -n 2 ls · 12s`。
+fn watch_header(w: &WatchCall, spinner: char, theme: &Theme) -> Line<'static> {
+    let (glyph, style) = match w.status {
+        WatchStatus::Running => (spinner.to_string(), theme.tool_running()),
+        WatchStatus::Idle => ("⏸".to_string(), theme.tool_running()),
+        WatchStatus::Done => ("✓".to_string(), theme.tool_done()),
+        WatchStatus::Failed => ("✗".to_string(), theme.tool_error()),
+        WatchStatus::Cancelled => ("×".to_string(), theme.dim()),
+    };
+    let mut spans = vec![
+        Span::styled(format!("{} {} ", glyph, w.label), style),
+    ];
+    if w.status != WatchStatus::Running {
+        spans.push(Span::styled(format!("· {}s", w.duration_ms / 1000), theme.dim()));
+    }
+    if let Some(d) = &w.detail {
+        spans.push(Span::styled(format!(" · {d}"), theme.text()));
+    }
+    Line::from(spans)
 }
 
 /// Recursive layout of one activity: header + (expanded) content or nested
@@ -664,7 +726,9 @@ fn fold_tail(act: &Activity) -> Option<String> {
         return None;
     }
     match &act.kind {
-        ActivityKind::Tool(_) | ActivityKind::Thinking(_) if !act.content.is_empty() => {
+        ActivityKind::Tool(_) | ActivityKind::Thinking(_) | ActivityKind::Watch(_)
+            if !act.content.is_empty() =>
+        {
             let mut tail = format!("… +{} lines", act.content.len());
             if let Some(hint) = &act.expand_hint {
                 tail.push_str(&format!(" ({hint})"));
@@ -713,7 +777,10 @@ fn activity_layout(
         // main-level activity dot (Claude Code: `⏺ Read(.mcp.json)`)
         if matches!(
             act.kind,
-            ActivityKind::Tool(_) | ActivityKind::SubAgent(_) | ActivityKind::Diff(_)
+            ActivityKind::Tool(_)
+            | ActivityKind::SubAgent(_)
+            | ActivityKind::Diff(_)
+            | ActivityKind::Watch(_)
         ) {
             header
                 .spans
@@ -770,6 +837,16 @@ fn activity_layout(
                     if let Some(summary) = &t.result_summary {
                         rows.push(prepend_line(
                             &Line::from(summary.clone()),
+                            &format!("{}⎿ ", cont),
+                            theme,
+                        ));
+                        content_lines += 1;
+                    }
+                }
+                if let ActivityKind::Watch(w) = &act.kind {
+                    if let Some(detail) = &w.detail {
+                        rows.push(prepend_line(
+                            &Line::from(detail.clone()),
                             &format!("{}⎿ ", cont),
                             theme,
                         ));
