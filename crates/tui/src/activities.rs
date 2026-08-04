@@ -665,7 +665,7 @@ fn fold_tail(act: &Activity) -> Option<String> {
         return None;
     }
     match &act.kind {
-        ActivityKind::Tool(_) if !act.content.is_empty() => {
+        ActivityKind::Tool(_) | ActivityKind::Thinking(_) if !act.content.is_empty() => {
             let mut tail = format!("… +{} lines", act.content.len());
             if let Some(hint) = &act.expand_hint {
                 tail.push_str(&format!(" ({hint})"));
@@ -883,7 +883,7 @@ mod tests {
         let mut h = thinking("understand", ThinkingState::Done);
         assert!(h.expandable());
         let lines = activity_lines(&h, '⠋', &Theme::dark());
-        assert_eq!(text(&lines[0]), "✻ understand for 2.3s");
+        assert_eq!(text(&lines[0]), "✻ understand for 2.3s … +1 lines");
         assert_eq!(lines.len(), 1, "collapsed: header only");
 
         h.toggle();

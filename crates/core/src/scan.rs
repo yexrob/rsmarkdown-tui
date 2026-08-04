@@ -142,8 +142,9 @@ pub fn last_non_empty_line_index(lines: &[&str]) -> isize {
 }
 
 pub(crate) fn is_backtick_part_of_triple(text: &str, index: usize) -> bool {
-    let before = text[..index].chars().next_back();
-    let before2 = text[..index.saturating_sub(1)].chars().next_back();
+    let mut back = text[..index].chars().rev();
+    let before = back.next();
+    let before2 = back.next();
     let after = text.get(index + 1..).and_then(|s| s.chars().next());
     let after2 = text.get(index + 2..).and_then(|s| s.chars().next());
     let c = |o: Option<char>| o == Some('`');
@@ -532,6 +533,17 @@ mod tests {
             "text**  "
         );
         assert_eq!(append_before_trailing_whitespace("text", "**"), "text**");
+    }
+
+    #[test]
+    fn backtick_after_cjk_does_not_panic() {
+        // index 落在多字节字符（中文标点）之后：`text[..index-1]` 会跨 char 边界。
+        let s = "中文：`code` 后";
+        let tick = s.find('`').unwrap();
+        let _ = is_backtick_part_of_triple(s, tick);
+        let s2 = "注解``code``";
+        let tick = s2.find('`').unwrap();
+        let _ = is_backtick_part_of_triple(s2, tick);
     }
 
     #[test]
