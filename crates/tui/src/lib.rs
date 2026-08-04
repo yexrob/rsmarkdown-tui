@@ -64,4 +64,5 @@ pub use component::Component;
 pub use image::{
     demo_gradient, detect_picker, draw_sliced, resolve_image, sliced_for, sliced_image_rect,
 };
+pub use renderer::theme::Theme;
 pub use renderer::{plain_text, render_block, render_inlines, truncate, StreamMarkdownRenderer};

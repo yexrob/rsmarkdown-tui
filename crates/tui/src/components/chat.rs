@@ -26,7 +26,8 @@ use crate::command_menu::{SlashCommand, SlashCommandMenu};
 use crate::component::Component;
 use crate::help::{HelpEntry, HelpPanel, HelpSection};
 use crate::permission::PermissionRequest;
-use crate::renderer::{theme, StreamMarkdownRenderer};
+use crate::renderer::theme::Theme;
+use crate::renderer::StreamMarkdownRenderer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Message role in the chat transcript.
@@ -224,6 +225,8 @@ pub struct AgentChat {
     menu_rect: Rect,
     /// Whether the `?` help panel is open.
     help_open: bool,
+    /// Semantic color theme.
+    pub theme: Theme,
 }
 
 impl AgentChat {
@@ -231,7 +234,7 @@ impl AgentChat {
     pub fn new() -> Self {
         let mut this = Self {
             processor: MarkdownProcessor::default(),
-            renderer: StreamMarkdownRenderer::new(80),
+            renderer: StreamMarkdownRenderer::with_theme(80, Theme::dark()),
             messages: Vec::new(),
             rendered: HashMap::new(),
             reply_cache: HashMap::new(),
@@ -247,6 +250,7 @@ impl AgentChat {
             slash_menu: None,
             menu_rect: Rect::default(),
             help_open: false,
+            theme: Theme::dark(),
         };
         this.submit("What does the pipeline look like?");
         this
@@ -471,7 +475,7 @@ impl AgentChat {
                 })
                 .collect(),
         };
-        let content = activities::todo_lines(&todo, activities::spinner(self.tick));
+        let content = activities::todo_lines(&todo, activities::spinner(self.tick), &self.theme);
         let mut hint = Activity::new(ActivityKind::Todo(todo));
         hint.set_content(content);
         hint
@@ -590,7 +594,8 @@ impl AgentChat {
                     ActivityKind::Todo(t) => t,
                     _ => unreachable!(),
                 };
-                let sub_todo_lines = activities::todo_lines(items, activities::spinner(self.tick));
+                let sub_todo_lines =
+                    activities::todo_lines(items, activities::spinner(self.tick), &self.theme);
                 sub_todo.set_content(sub_todo_lines);
                 transcript.push(sub_todo);
                 // sub-thinking
@@ -758,7 +763,7 @@ impl AgentChat {
                         }
                     }
                     let diff = Diff::parse_unified(DIFF_SRC);
-                    let content = activities::diff_lines(&diff);
+                    let content = activities::diff_lines(&diff, &self.theme);
                     let mut hint = Activity::new(ActivityKind::Diff(diff));
                     hint.set_content(content);
                     self.push_hint(hint);
@@ -908,7 +913,7 @@ impl AgentChat {
                 Role::User => out.push_str(&format!("you: {}\n", msg.text)),
                 Role::Assistant => {
                     for hint in &msg.hints {
-                        for line in activities::activity_lines(hint, '⠿') {
+                        for line in activities::activity_lines(hint, '⠿', &self.theme) {
                             out.push_str(
                                 &line
                                     .spans
@@ -964,9 +969,9 @@ impl Component for AgentChat {
         // paint input line
         let caret = if self.typing { '▋' } else { ' ' };
         let input_line = Line::from(vec![
-            Span::styled("you › ", theme::tool_running()),
-            Span::styled(self.input.clone(), theme::text()),
-            Span::styled(caret.to_string(), theme::tool_running()),
+            Span::styled("you › ", self.theme.tool_running()),
+            Span::styled(self.input.clone(), self.theme.text()),
+            Span::styled(caret.to_string(), self.theme.tool_running()),
         ]);
         buf.set_line(0, input_area.y, &input_line, input_area.width);
 
@@ -982,8 +987,8 @@ impl Component for AgentChat {
             match self.messages[i].role {
                 Role::User => {
                     rows.push(Line::from(vec![
-                        Span::styled("you ", theme::tool_running()),
-                        Span::styled(self.messages[i].text.clone(), theme::text()),
+                        Span::styled("you ", self.theme.tool_running()),
+                        Span::styled(self.messages[i].text.clone(), self.theme.text()),
                     ]));
                     doc_row += 1;
                 }
@@ -1005,6 +1010,7 @@ impl Component for AgentChat {
                         doc_row,
                         &self.messages[i].hints,
                         spinner,
+                        &self.theme,
                         &mut render,
                     );
                     doc_row += lines.len() as u16;
@@ -1177,6 +1183,13 @@ impl Component for AgentChat {
         self.advance(33);
     }
 
+    fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme.clone();
+        self.renderer.theme = theme;
+        self.rendered.clear();
+        self.reply_cache.clear();
+    }
+
     fn on_ask(&mut self) -> Option<PermissionRequest> {
         // demo: once the Edit diff is done, ask permission to edit the file
         // (Claude Code shows the diff in the prompt)
@@ -1201,7 +1214,7 @@ impl Component for AgentChat {
             )
             .target("crates/core/src/blocks.rs")
             .source(r#"subagent "explore""#)
-            .content(activities::diff_lines(&diff)),
+            .content(activities::diff_lines(&diff, &self.theme)),
         )
     }
 
@@ -1234,7 +1247,7 @@ impl Component for AgentChat {
                         sub.result.clone().unwrap_or_else(|| "done".to_string())
                     };
                     agent.result = sub.result.clone();
-                    agent.transcript_lines = activities::activity_lines(hint, '⠿');
+                    agent.transcript_lines = activities::activity_lines(hint, '⠿', &self.theme);
                     out.push(agent);
                 }
             }
@@ -1289,14 +1302,17 @@ impl Component for AgentChat {
             } else {
                 format!("← {} agents", running)
             };
-            vec![crate::app::FooterBadge::new(text, theme::tool_running())]
+            vec![crate::app::FooterBadge::new(
+                text,
+                self.theme.tool_running(),
+            )]
         } else if done > 0 {
             let text = if done == 1 {
                 "← 1 done".to_string()
             } else {
                 format!("← {} done", done)
             };
-            vec![crate::app::FooterBadge::new(text, theme::tool_done())]
+            vec![crate::app::FooterBadge::new(text, self.theme.tool_done())]
         } else {
             Vec::new()
         }

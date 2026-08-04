@@ -199,6 +199,16 @@ reveals the priority-folded window — finished items collapse to a leading
 `… N done`, the window shows the in-progress + next unfinished items (at
 most 5), and the rest collapse to a trailing `… +N more`.
 
+## Theming
+
+Every color flows through one [`Theme`] value object of semantic tokens
+(`text`, `inactive`, `claude` accent, `permission`, `success`/`error`/
+`warning`, …). Presets: `Theme::dark()` (the default look), `Theme::light()`
+and `Theme::automatic()` (resolves to dark for now). `App::set_theme` applies
+the theme to the status bar and broadcasts it to every component
+(`Component::set_theme`); the markdown renderer, activities, panels and
+dialogs all paint through the same tokens.
+
 ## Performance
 
 Two tools:

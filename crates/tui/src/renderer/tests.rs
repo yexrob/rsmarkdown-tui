@@ -3,6 +3,7 @@
 use rsmarkdown_core::parse::parse_block;
 use rsmarkdown_core::{Block, Inline};
 
+use crate::renderer::theme::Theme;
 use crate::renderer::{plain_text, render_block, render_inlines};
 
 fn plain(lines: &[ratatui::text::Line]) -> Vec<String> {
@@ -21,7 +22,7 @@ fn plain(lines: &[ratatui::text::Line]) -> Vec<String> {
 fn paragraph_wraps() {
     let ast = parse_block("hello world this is a long paragraph that must wrap");
     let ast = Some(ast);
-    let lines = render_block(&ast, 20);
+    let lines = render_block(&ast, 20, &Theme::dark());
     let text = plain(&lines);
     assert!(text.len() >= 2);
     assert_eq!(text[0], "hello world this is");
@@ -33,7 +34,7 @@ fn paragraph_wraps() {
 fn heading_and_inline_styles() {
     let ast = parse_block("# Title **bold** `code`");
     let ast = Some(ast);
-    let lines = render_block(&ast, 80);
+    let lines = render_block(&ast, 80, &Theme::dark());
     assert_eq!(plain(&lines), vec!["Title bold code"]);
     // first span (heading glyph styling) — verify bold modifier is applied
     let spans = &lines[0].spans;
@@ -52,7 +53,7 @@ fn heading_and_inline_styles() {
 fn table_layout() {
     let ast = parse_block("| a | b |\n|---|---|\n| 1 | 22 |");
     let ast = Some(ast);
-    let lines = render_block(&ast, 40);
+    let lines = render_block(&ast, 40, &Theme::dark());
     let text = plain(&lines);
     assert_eq!(text[0], "│ a │ b  │");
     assert_eq!(text[1], "│───┼────│");
@@ -63,7 +64,7 @@ fn table_layout() {
 fn task_list_and_quote() {
     let ast = parse_block("- [x] done\n- [ ] todo\n\n> quoted");
     let ast = Some(ast);
-    let lines = render_block(&ast, 40);
+    let lines = render_block(&ast, 40, &Theme::dark());
     let text = plain(&lines);
     assert!(text.iter().any(|l| l.contains("[x] done")));
     assert!(text.iter().any(|l| l.contains("[ ] todo")));
@@ -73,7 +74,7 @@ fn task_list_and_quote() {
 #[test]
 fn cjk_width_respected() {
     let inlines = vec![Inline::Text("中文测试文本".to_string())];
-    let lines = render_inlines(&inlines, 8); // 6 CJK chars * 2 = 12 cols > 8
+    let lines = render_inlines(&inlines, 8, &Theme::dark()); // 6 CJK chars * 2 = 12 cols > 8
     let text = plain(&lines);
     assert!(text.len() >= 2, "should wrap CJK: {:?}", text);
 }

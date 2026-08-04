@@ -8,7 +8,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::component::Component;
-use crate::renderer::theme;
+use crate::renderer::theme::Theme;
 
 /// A task-list row.
 pub struct TodoItem {
@@ -19,6 +19,8 @@ pub struct TodoItem {
 /// Selectable task list component.
 pub struct ListView {
     items: Vec<TodoItem>,
+    /// Semantic color theme.
+    pub theme: Theme,
     selected: usize,
     scroll: u16,
 }
@@ -43,8 +45,14 @@ impl ListView {
         .into_iter()
         .map(|text| TodoItem { text, done: false })
         .collect();
+        Self::with_theme(items, Theme::dark())
+    }
+
+    /// Create a list view with an explicit theme.
+    pub fn with_theme(items: Vec<TodoItem>, theme: Theme) -> Self {
         Self {
             items,
+            theme,
             selected: 0,
             scroll: 0,
         }
@@ -67,6 +75,9 @@ impl ListView {
 }
 
 impl Component for ListView {
+    fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+    }
     fn title(&self) -> &str {
         "tasks"
     }
@@ -88,9 +99,9 @@ impl Component for ListView {
             };
             let selected = idx == self.selected;
             let (marker, marker_style) = if item.done {
-                ("[x]", theme::task_done())
+                ("[x]", self.theme.task_done())
             } else {
-                ("[ ]", theme::task_open())
+                ("[ ]", self.theme.task_open())
             };
             let mut style = if item.done {
                 Style::default().add_modifier(Modifier::DIM)

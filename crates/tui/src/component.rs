@@ -9,6 +9,7 @@ use ratatui::layout::Rect;
 use crate::agent::Agent;
 use crate::app::FooterBadge;
 use crate::permission::{DialogAction, PermissionRequest};
+use crate::renderer::theme::Theme;
 
 /// A renderable, interactive pane hosted by [`crate::App`].
 ///
@@ -70,4 +71,8 @@ pub trait Component {
     /// Receive the merged agent table broadcast by the host (see
     /// [`Self::agents`]). Default: ignore.
     fn absorb_agents(&mut self, _agents: &[Agent]) {}
+
+    /// Switch the semantic color theme of this component. The host calls
+    /// this on every component when the app theme changes ([`crate::App::set_theme`]).
+    fn set_theme(&mut self, _theme: Theme) {}
 }

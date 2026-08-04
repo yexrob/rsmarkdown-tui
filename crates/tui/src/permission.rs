@@ -18,14 +18,14 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
 
-use crate::renderer::theme;
+use crate::renderer::theme::Theme;
 
 /// Erase `rect` with spaces on the overlay background, so whatever the
 /// component behind drew there does not bleed through the panel.
-pub fn erase_overlay(buf: &mut Buffer, rect: Rect) {
+pub fn erase_overlay(buf: &mut Buffer, rect: Rect, theme: &Theme) {
     let fill = " ".repeat(rect.width as usize);
     for y in rect.y..rect.y + rect.height {
-        buf.set_string(rect.x, y, &fill, theme::overlay());
+        buf.set_string(rect.x, y, &fill, theme.overlay());
     }
 }
 
@@ -107,6 +107,8 @@ pub struct PermissionDialog {
     pub selected: usize,
     /// Rect used by the last draw (option row math).
     last_rect: Rect,
+    /// Semantic color theme.
+    pub theme: Theme,
 }
 
 impl PermissionDialog {
@@ -116,6 +118,17 @@ impl PermissionDialog {
             request,
             selected: 0,
             last_rect: Rect::default(),
+            theme: Theme::dark(),
+        }
+    }
+
+    /// Open a dialog with an explicit theme.
+    pub fn with_theme(request: PermissionRequest, theme: Theme) -> Self {
+        Self {
+            request,
+            selected: 0,
+            last_rect: Rect::default(),
+            theme,
         }
     }
 
@@ -216,14 +229,14 @@ impl PermissionDialog {
 
         // cover the panel's own area so content behind it does not show
         // through; everything outside the rect keeps rendering normally
-        erase_overlay(buf, rect);
+        erase_overlay(buf, rect, &self.theme);
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(theme::overlay())
-            .border_style(theme::permission())
+            .style(self.theme.overlay())
+            .border_style(self.theme.permission())
             .title(Line::from(Span::styled(
                 self.request.title.clone(),
-                theme::permission(),
+                self.theme.permission(),
             )))
             .title_alignment(ratatui::layout::Alignment::Left);
         let inner = block.inner(rect);
@@ -235,7 +248,7 @@ impl PermissionDialog {
             buf.set_line(
                 inner.x + 2,
                 y,
-                &Line::from(Span::styled(target, theme::dim())),
+                &Line::from(Span::styled(target, self.theme.dim())),
                 inner.width.saturating_sub(2),
             );
             y += 1;
@@ -245,8 +258,8 @@ impl PermissionDialog {
                 inner.x + 2,
                 y,
                 &Line::from(vec![
-                    Span::styled("⏺ ", theme::activity_dot()),
-                    Span::styled(source, theme::dim()),
+                    Span::styled("⏺ ", self.theme.activity_dot()),
+                    Span::styled(source, self.theme.dim()),
                 ]),
                 inner.width.saturating_sub(2),
             );
@@ -262,7 +275,7 @@ impl PermissionDialog {
                 y,
                 &Line::from(Span::styled(
                     format!("… +{} more", content_count - content_rows),
-                    theme::dim(),
+                    self.theme.dim(),
                 )),
                 inner.width.saturating_sub(2),
             );
@@ -272,7 +285,10 @@ impl PermissionDialog {
         buf.set_line(
             inner.x + 2,
             y,
-            &Line::from(Span::styled(self.request.question.clone(), theme::text())),
+            &Line::from(Span::styled(
+                self.request.question.clone(),
+                self.theme.text(),
+            )),
             inner.width.saturating_sub(2),
         );
         y += 1;
@@ -284,12 +300,12 @@ impl PermissionDialog {
                 Span::styled(
                     marker,
                     if selected {
-                        theme::permission_selected()
+                        self.theme.permission_selected()
                     } else {
                         Style::default()
                     },
                 ),
-                Span::styled(format!("{}. {}", i + 1, option), theme::text()),
+                Span::styled(format!("{}. {}", i + 1, option), self.theme.text()),
             ];
             buf.set_line(
                 inner.x + 2,

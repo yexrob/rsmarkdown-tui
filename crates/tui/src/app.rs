@@ -19,8 +19,7 @@ use ratatui::Terminal;
 
 use crate::component::Component;
 use crate::permission::{DialogAction, PermissionDialog, PermissionRequest};
-use crate::renderer::theme;
-
+use crate::renderer::theme::Theme;
 /// A small status badge shown in the host footer (Claude Code style:
 /// `⏸ plan mode on`, `← for agents`, `PR #446`).
 #[derive(Debug, Clone)]
@@ -63,17 +62,18 @@ impl SessionMode {
         }
     }
 
-    /// Claude Code footer badge text for this mode.
-    pub fn badge(self) -> Option<FooterBadge> {
+    /// Claude Code footer badge text for this mode (colored with the
+    /// given theme).
+    pub fn badge(self, theme: &Theme) -> Option<FooterBadge> {
         match self {
             SessionMode::Default => None,
             SessionMode::AcceptEdits => Some(FooterBadge::new(
                 "⏵⏵ accept edits on (m to cycle)",
-                theme::mode_on(),
+                theme.mode_on(),
             )),
             SessionMode::Plan => Some(FooterBadge::new(
                 "⏸ plan mode on (m to cycle)",
-                theme::mode_on(),
+                theme.mode_on(),
             )),
         }
     }
@@ -127,6 +127,9 @@ pub struct App {
     dialog_rect: ratatui::layout::Rect,
     /// Completed dialog action awaiting the app owner.
     dialog_action: Option<DialogAction>,
+    /// Semantic color theme (drives the status bar; broadcast to all
+    /// components via [`Component::set_theme`]).
+    theme: Theme,
 }
 
 impl App {
@@ -143,6 +146,7 @@ impl App {
             permission: None,
             dialog_rect: ratatui::layout::Rect::default(),
             dialog_action: None,
+            theme: Theme::dark(),
         }
     }
 
@@ -216,9 +220,9 @@ impl App {
         // status bar: focus index, title, badges (mode/agents/PR — most
         // important, first to survive narrow terminals), status, hints, keys
         let title_style = if n > 1 {
-            theme::status()
+            self.theme.status()
         } else {
-            theme::status_inactive()
+            self.theme.status_inactive()
         };
         let mut status = vec![Span::styled(
             format!(" [{}] {} ", self.focused + 1, title),
@@ -231,27 +235,27 @@ impl App {
             // modal: the dialog replaces the component status text and hints
             status.push(Span::styled(
                 format!(" {} — {}", dialog.request.title, dialog.request.question),
-                theme::permission(),
+                self.theme.permission(),
             ));
             status.push(Span::styled(
                 format!(
                     " esc cancel · enter confirm · digits 1-{}",
                     dialog.option_count()
                 ),
-                theme::dim(),
+                self.theme.dim(),
             ));
         } else {
-            status.push(Span::styled(format!(" {}", status_text), theme::text()));
+            status.push(Span::styled(format!(" {}", status_text), self.theme.text()));
             if !hints.is_empty() {
-                status.push(Span::styled(format!(" {}", hints), theme::dim()));
+                status.push(Span::styled(format!(" {}", hints), self.theme.dim()));
             }
             if n > 1 {
                 status.push(Span::styled(
                     "  [Tab] next  [m] mode  [q] quit",
-                    theme::dim(),
+                    self.theme.dim(),
                 ));
             } else {
-                status.push(Span::styled("  [m] mode  [q] quit", theme::dim()));
+                status.push(Span::styled("  [m] mode  [q] quit", self.theme.dim()));
             }
         }
         buf.set_line(0, status_area.y, &Line::from(status), status_area.width);
@@ -411,6 +415,20 @@ impl App {
         self.mode
     }
 
+    /// Current color theme.
+    pub fn theme(&self) -> &Theme {
+        &self.theme
+    }
+
+    /// Switch the color theme: applies it to the status bar and broadcasts
+    /// it to every mounted component ([`Component::set_theme`]).
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme.clone();
+        for component in &mut self.components {
+            component.set_theme(theme.clone());
+        }
+    }
+
     /// Cycle the session permission mode (`m`).
     pub fn cycle_mode(&mut self) {
         self.mode = self.mode.next();
@@ -424,7 +442,7 @@ impl App {
     /// Footer badges: session mode + focused component's own badges.
     fn footer_badges(&self) -> Vec<FooterBadge> {
         let mut badges = Vec::new();
-        if let Some(b) = self.mode.badge() {
+        if let Some(b) = self.mode.badge(&self.theme) {
             badges.push(b);
         }
         if let Some((n, status)) = self.pr {

@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::permission::erase_overlay;
-use crate::renderer::theme;
+use crate::renderer::theme::Theme;
 
 /// One slash command (`/name` with a description).
 #[derive(Debug, Clone)]
@@ -44,6 +44,8 @@ pub const MENU_ROWS: usize = 8;
 pub struct SlashCommandMenu {
     /// All commands, in menu order.
     pub commands: Vec<SlashCommand>,
+    /// Semantic color theme.
+    pub theme: Theme,
     /// Indices into `commands` matching the current filter, in order.
     filtered_indices: Vec<usize>,
     /// Current filter text (what follows `/` in the prompt).
@@ -59,8 +61,14 @@ pub struct SlashCommandMenu {
 impl SlashCommandMenu {
     /// Open a menu over the given commands (filter empty).
     pub fn new(commands: Vec<SlashCommand>) -> Self {
+        Self::with_theme(commands, Theme::dark())
+    }
+
+    /// Open a menu with an explicit theme.
+    pub fn with_theme(commands: Vec<SlashCommand>, theme: Theme) -> Self {
         let mut this = Self {
             commands,
+            theme,
             filtered_indices: Vec::new(),
             filter: String::new(),
             selected: 0,
@@ -153,14 +161,14 @@ impl SlashCommandMenu {
             height,
         };
         // cover the menu's own area so the transcript does not show through
-        erase_overlay(buf, rect);
+        erase_overlay(buf, rect, &self.theme);
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(theme::overlay())
-            .border_style(theme::overlay_border())
+            .style(self.theme.overlay())
+            .border_style(self.theme.overlay_border())
             .title(Line::from(Span::styled(
                 format!("/{}", self.filter),
-                theme::tool_running(),
+                self.theme.tool_running(),
             )))
             .title_alignment(ratatui::layout::Alignment::Left);
         let inner = block.inner(rect);
@@ -181,14 +189,14 @@ impl SlashCommandMenu {
             let cmd = &self.commands[abs];
             let marker = if selected { "❯" } else { " " };
             let name_style = if selected {
-                theme::tool_running()
+                self.theme.tool_running()
             } else {
-                theme::text()
+                self.theme.text()
             };
             let desc_style = if selected {
-                theme::text()
+                self.theme.text()
             } else {
-                theme::dim()
+                self.theme.dim()
             };
             let line = Line::from(vec![
                 Span::styled(format!("{} /{}", marker, cmd.name), name_style),

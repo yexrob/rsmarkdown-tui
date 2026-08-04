@@ -13,9 +13,14 @@ use unicode_width::UnicodeWidthChar;
 
 use rsmarkdown_core::{Alignment, Ast, Block, Document, Inline, ListItem, Renderer};
 
+use crate::renderer::theme::Theme;
+
 /// A display adapter: markdown AST -> styled terminal lines.
 pub struct StreamMarkdownRenderer {
+    /// Wrap width.
     width: usize,
+    /// Semantic color theme.
+    pub theme: Theme,
     /// per-block cache: (source content, rendered lines)
     cached: Vec<Option<(String, Vec<Line<'static>>)>>,
     lines: Vec<Line<'static>>,
@@ -28,10 +33,16 @@ impl Default for StreamMarkdownRenderer {
 }
 
 impl StreamMarkdownRenderer {
-    /// Create a renderer for the given wrap width.
+    /// Create a renderer for the given wrap width (dark theme).
     pub fn new(width: usize) -> Self {
+        Self::with_theme(width, Theme::dark())
+    }
+
+    /// Create a renderer with an explicit theme.
+    pub fn with_theme(width: usize, theme: Theme) -> Self {
         Self {
             width,
+            theme,
             cached: Vec::new(),
             lines: Vec::new(),
         }
@@ -68,7 +79,7 @@ impl Renderer for StreamMarkdownRenderer {
             let rendered = match cached {
                 Some((src, lines)) if src == &block.content => lines.clone(),
                 _ => {
-                    let lines = render_block(&block.ast, self.width);
+                    let lines = render_block(&block.ast, self.width, &self.theme);
                     *cached = Some((block.content.clone(), lines.clone()));
                     lines
                 }
@@ -83,45 +94,51 @@ impl Renderer for StreamMarkdownRenderer {
 }
 
 /// Render one block's AST into styled lines.
-pub fn render_block(ast: &Option<Ast>, width: usize) -> Vec<Line<'static>> {
+pub fn render_block(ast: &Option<Ast>, width: usize, theme: &Theme) -> Vec<Line<'static>> {
     let Some(ast) = ast else { return Vec::new() };
     let mut out = Vec::new();
     for block in &ast.children {
-        render_into(block, &mut out, width, 0);
+        render_into(block, &mut out, width, 0, theme);
     }
     out
 }
 
-fn render_into(block: &Block, out: &mut Vec<Line<'static>>, width: usize, indent: usize) {
+fn render_into(
+    block: &Block,
+    out: &mut Vec<Line<'static>>,
+    width: usize,
+    indent: usize,
+    theme: &Theme,
+) {
     match block {
         Block::Paragraph(inlines) => {
-            let lines = render_inlines(inlines, width.saturating_sub(indent));
+            let lines = render_inlines(inlines, width.saturating_sub(indent), theme);
             push_indented(out, lines, indent);
         }
         Block::Heading { level, children } => {
-            let lines = render_inlines(children, width.saturating_sub(indent));
+            let lines = render_inlines(children, width.saturating_sub(indent), theme);
             let lines: Vec<Line<'static>> = lines
                 .into_iter()
-                .map(|l| l.style(theme::heading(*level)))
+                .map(|l| l.style(theme.heading(*level)))
                 .collect();
             push_indented(out, lines, indent);
         }
         Block::Code { lang, text } => {
             let _ = lang;
-            let body = render_code(text, width.saturating_sub(indent));
+            let body = render_code(text, width.saturating_sub(indent), theme);
             push_indented(out, body, indent);
         }
         Block::BlockQuote(children) => {
             let mut inner = Vec::new();
             for child in children {
-                render_into(child, &mut inner, width - 2, 0);
+                render_into(child, &mut inner, width - 2, 0, theme);
             }
             for line in inner {
                 let mut styled = Vec::new();
-                styled.push(Span::styled("▌ ", theme::quote_bar()));
+                styled.push(Span::styled("▌ ", theme.quote_bar()));
                 for span in line.spans {
                     let mut s = span.style;
-                    s = s.patch(theme::quote());
+                    s = s.patch(theme.quote());
                     styled.push(Span::styled(span.content, s));
                 }
                 out.push(Line::from(styled));
@@ -132,19 +149,19 @@ fn render_into(block: &Block, out: &mut Vec<Line<'static>>, width: usize, indent
             start,
             items,
         } => {
-            render_list(items, *ordered, *start, out, width, indent);
+            render_list(theme, items, *ordered, *start, out, width, indent);
         }
         Block::Table {
             headers,
             rows,
             aligns,
         } => {
-            render_table(headers, rows, aligns, out, width, indent);
+            render_table(theme, headers, rows, aligns, out, width, indent);
         }
         Block::ThematicBreak => {
             let mut spans = Vec::new();
             let n = width.saturating_sub(indent);
-            spans.push(Span::styled("─".repeat(n), theme::hr()));
+            spans.push(Span::styled("─".repeat(n), theme.hr()));
             out.push(Line::from(spans));
         }
         Block::Html(html) => {
@@ -152,26 +169,26 @@ fn render_into(block: &Block, out: &mut Vec<Line<'static>>, width: usize, indent
             for line in html.split('\n') {
                 let t = line.trim_end();
                 if !t.is_empty() {
-                    out.push(Line::styled(t.to_string(), theme::dim()));
+                    out.push(Line::styled(t.to_string(), theme.dim()));
                 }
             }
         }
         Block::FootnoteDefinition { label, children } => {
             let mut inner = Vec::new();
             for child in children {
-                render_into(child, &mut inner, width - 2, 0);
+                render_into(child, &mut inner, width - 2, 0, theme);
             }
             if let Some(first) = inner.first_mut() {
                 first
                     .spans
-                    .insert(0, Span::styled(format!("[^{}] ", label), theme::footnote()));
+                    .insert(0, Span::styled(format!("[^{}] ", label), theme.footnote()));
             }
             for line in inner {
                 let mut styled = Vec::new();
-                styled.push(Span::styled("  ", theme::footnote()));
+                styled.push(Span::styled("  ", theme.footnote()));
                 for span in line.spans {
                     let mut s = span.style;
-                    s = s.patch(theme::footnote());
+                    s = s.patch(theme.footnote());
                     styled.push(Span::styled(span.content, s));
                 }
                 out.push(Line::from(styled));
@@ -192,7 +209,7 @@ fn push_indented(out: &mut Vec<Line<'static>>, lines: Vec<Line<'static>>, indent
     }
 }
 
-fn render_code(text: &str, width: usize) -> Vec<Line<'static>> {
+fn render_code(text: &str, width: usize, theme: &Theme) -> Vec<Line<'static>> {
     let mut out = Vec::new();
     for line in text.split('\n') {
         if line.is_empty() {
@@ -200,12 +217,13 @@ fn render_code(text: &str, width: usize) -> Vec<Line<'static>> {
             continue;
         }
         let line = truncate(line, width);
-        out.push(Line::styled(format!("  {}", line), theme::code_block()));
+        out.push(Line::styled(format!("  {}", line), theme.code_block()));
     }
     out
 }
 
 fn render_list(
+    theme: &Theme,
     items: &[ListItem],
     ordered: bool,
     start: u64,
@@ -225,14 +243,14 @@ fn render_list(
     for (i, item) in items.iter().enumerate() {
         let marker = if let Some(checked) = item.checked {
             if checked {
-                Span::styled("[x]", theme::task_done())
+                Span::styled("[x]", theme.task_done())
             } else {
-                Span::styled("[ ]", theme::task_open())
+                Span::styled("[ ]", theme.task_open())
             }
         } else if ordered {
-            Span::styled(format!("{}.", start + i as u64), theme::list_marker())
+            Span::styled(format!("{}.", start + i as u64), theme.list_marker())
         } else {
-            Span::styled("•", theme::list_marker())
+            Span::styled("•", theme.list_marker())
         };
         let marker_w_used = marker.width();
 
@@ -243,6 +261,7 @@ fn render_list(
                 &mut inner,
                 width.saturating_sub(indent + marker_w),
                 0,
+                theme,
             );
         }
         if inner.is_empty() {
@@ -268,6 +287,8 @@ fn render_list(
 }
 
 fn render_table(
+    theme: &Theme,
+
     headers: &[Vec<Inline>],
     rows: &[Vec<Vec<Inline>>],
     aligns: &[Alignment],
@@ -300,40 +321,36 @@ fn render_table(
     }
 
     let sep = |w: &[usize]| {
-        let mut spans = vec![Span::styled("│", theme::table_border())];
+        let mut spans = vec![Span::styled("│", theme.table_border())];
         for (i, cw) in w.iter().enumerate() {
-            spans.push(Span::styled("─".repeat(*cw + 2), theme::table_border()));
+            spans.push(Span::styled("─".repeat(*cw + 2), theme.table_border()));
             spans.push(Span::styled(
                 if i + 1 == w.len() { "│" } else { "┼" },
-                theme::table_border(),
+                theme.table_border(),
             ));
         }
         spans
     };
 
-    fn push_row(
-        out: &mut Vec<Line<'static>>,
-        widths: &[usize],
-        cells: &[Vec<Inline>],
-        style: Style,
-    ) {
-        let mut spans = vec![Span::styled("│", theme::table_border())];
-        for (c, w) in widths.iter().enumerate() {
-            let cell = cells.get(c);
-            let text = cell.map(|c| plain_text(c)).unwrap_or_default();
-            spans.push(Span::raw(" "));
-            spans.push(Span::styled(truncate(&text, *w), style));
-            let pad = w.saturating_sub(text.width()) + 1;
-            spans.push(Span::raw(" ".repeat(pad)));
-            spans.push(Span::styled("│", theme::table_border()));
-        }
-        out.push(Line::from(spans));
-    }
+    let push_row =
+        |out: &mut Vec<Line<'static>>, widths: &[usize], cells: &[Vec<Inline>], style: Style| {
+            let mut spans = vec![Span::styled("│", theme.table_border())];
+            for (c, w) in widths.iter().enumerate() {
+                let cell = cells.get(c);
+                let text = cell.map(|c| plain_text(c)).unwrap_or_default();
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(truncate(&text, *w), style));
+                let pad = w.saturating_sub(text.width()) + 1;
+                spans.push(Span::raw(" ".repeat(pad)));
+                spans.push(Span::styled("│", theme.table_border()));
+            }
+            out.push(Line::from(spans));
+        };
 
-    push_row(out, &widths, headers, theme::table_header());
+    push_row(out, &widths, headers, theme.table_header());
     out.push(Line::from(sep(&widths)));
     for row in rows {
-        push_row(out, &widths, row, theme::text());
+        push_row(out, &widths, row, theme.text());
     }
     let _ = aligns;
 }
@@ -373,50 +390,47 @@ fn shrink_columns(widths: &mut [usize], budget: usize) {
 // ---------------------------------------------------------------------------
 
 /// Render inline content to wrapped styled lines.
-pub fn render_inlines(inlines: &[Inline], width: usize) -> Vec<Line<'static>> {
+pub fn render_inlines(inlines: &[Inline], width: usize, theme: &Theme) -> Vec<Line<'static>> {
     let mut spans: Vec<Span<'static>> = Vec::new();
-    collect_inlines(inlines, theme::text(), &mut spans);
+    collect_inlines(inlines, theme.text(), theme, &mut spans);
     wrap_spans(spans, width)
 }
 
-fn collect_inlines(inlines: &[Inline], style: Style, out: &mut Vec<Span<'static>>) {
+fn collect_inlines(inlines: &[Inline], style: Style, theme: &Theme, out: &mut Vec<Span<'static>>) {
     for inline in inlines {
         match inline {
             Inline::Text(t) => out.push(Span::styled(t.clone(), style)),
             Inline::SoftBreak => out.push(Span::raw(" ")),
             Inline::HardBreak => out.push(Span::raw(" ")),
-            Inline::Code(c) => out.push(Span::styled(c.clone(), theme::code())),
+            Inline::Code(c) => out.push(Span::styled(c.clone(), theme.code())),
             Inline::Strong(children) => {
-                collect_inlines(children, style.patch(theme::strong()), out)
+                collect_inlines(children, style.patch(theme.strong()), theme, out)
             }
             Inline::Emphasis(children) => {
-                collect_inlines(children, style.patch(theme::emphasis()), out)
+                collect_inlines(children, style.patch(theme.emphasis()), theme, out)
             }
             Inline::Strikethrough(children) => {
-                collect_inlines(children, style.patch(theme::strikethrough()), out)
+                collect_inlines(children, style.patch(theme.strikethrough()), theme, out)
             }
             Inline::Link { text, url } => {
-                collect_inlines(text, style.patch(theme::link()), out);
-                out.push(Span::styled(
-                    format!("({})", url),
-                    style.patch(theme::dim()),
-                ));
+                collect_inlines(text, style.patch(theme.link()), theme, out);
+                out.push(Span::styled(format!("({})", url), style.patch(theme.dim())));
             }
             Inline::Image { alt, .. } => {
                 out.push(Span::styled(
                     format!("[image: {}]", alt),
-                    style.patch(theme::link()),
+                    style.patch(theme.link()),
                 ));
             }
             Inline::Math(m, _display) => {
                 let content = math::latex_to_unicode(m);
-                out.push(Span::styled(content, style.patch(theme::math())));
+                out.push(Span::styled(content, style.patch(theme.math())));
             }
-            Inline::Html(h) => out.push(Span::styled(h.clone(), style.patch(theme::dim()))),
+            Inline::Html(h) => out.push(Span::styled(h.clone(), style.patch(theme.dim()))),
             Inline::FootnoteRef(l) => {
                 out.push(Span::styled(
                     format!("[^{}]", l),
-                    style.patch(theme::footnote()),
+                    style.patch(theme.footnote()),
                 ));
             }
         }

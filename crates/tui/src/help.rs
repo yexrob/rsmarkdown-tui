@@ -12,7 +12,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::permission::erase_overlay;
-use crate::renderer::theme;
+use crate::renderer::theme::Theme;
 
 /// One keybinding row.
 #[derive(Debug, Clone)]
@@ -38,6 +38,8 @@ pub struct HelpPanel {
     pub sections: Vec<HelpSection>,
     /// Scroll offset of the panel content.
     pub scroll: u16,
+    /// Semantic color theme.
+    pub theme: Theme,
 }
 
 /// Column width reserved for the key names.
@@ -46,9 +48,15 @@ pub const KEYS_COL: u16 = 14;
 impl HelpPanel {
     /// Build a panel from sections (scroll starts at the top).
     pub fn new(sections: Vec<HelpSection>) -> Self {
+        Self::with_theme(sections, Theme::dark())
+    }
+
+    /// Build a panel from sections with an explicit theme.
+    pub fn with_theme(sections: Vec<HelpSection>, theme: Theme) -> Self {
         Self {
             sections,
             scroll: 0,
+            theme,
         }
     }
 
@@ -80,14 +88,14 @@ impl HelpPanel {
             height,
         };
         // cover the panel's own area so the transcript does not show through
-        erase_overlay(buf, rect);
+        erase_overlay(buf, rect, &self.theme);
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(theme::overlay())
-            .border_style(theme::overlay_border())
+            .style(self.theme.overlay())
+            .border_style(self.theme.overlay_border())
             .title(Line::from(Span::styled(
                 "Keyboard shortcuts",
-                theme::tool_running(),
+                self.theme.tool_running(),
             )))
             .title_alignment(ratatui::layout::Alignment::Left);
         let inner = block.inner(rect);
@@ -113,7 +121,7 @@ impl HelpPanel {
                 buf.set_line(
                     inner.x + 1,
                     y,
-                    &Line::from(Span::styled(section.title, theme::dim())),
+                    &Line::from(Span::styled(section.title, self.theme.dim())),
                     inner.width.saturating_sub(1),
                 );
                 y += 1;
@@ -129,9 +137,9 @@ impl HelpPanel {
                     let keys = format!("{}", entry.keys);
                     let padding = KEYS_COL.saturating_sub(keys.chars().count() as u16);
                     let line = Line::from(vec![
-                        Span::styled(keys, theme::tool_running()),
-                        Span::styled(" ".repeat(padding as usize), theme::dim()),
-                        Span::styled(entry.description, theme::text()),
+                        Span::styled(keys, self.theme.tool_running()),
+                        Span::styled(" ".repeat(padding as usize), self.theme.dim()),
+                        Span::styled(entry.description, self.theme.text()),
                     ]);
                     buf.set_line(inner.x + 1, y, &line, inner.width.saturating_sub(1));
                     y += 1;

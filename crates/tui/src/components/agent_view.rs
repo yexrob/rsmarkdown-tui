@@ -26,7 +26,7 @@ use crate::agent::{fmt_age, merge_agents, Agent, AgentGroup, AgentStatus};
 use crate::app::FooterBadge;
 use crate::component::Component;
 use crate::permission::erase_overlay;
-use crate::renderer::theme;
+use crate::renderer::theme::Theme;
 
 /// Completed rows above this count collapse to a `… N more` row.
 pub const MAX_COMPLETED: usize = 8;
@@ -46,6 +46,8 @@ enum Overlay {
 pub struct AgentView {
     /// Session rows, in display order (merge order of the host broadcast).
     agents: Vec<Agent>,
+    /// Semantic color theme.
+    pub theme: Theme,
     /// Selected row (flattened display index, including group headers).
     selected: usize,
     /// Scroll offset of the table.
@@ -80,8 +82,14 @@ pub(crate) enum TableRow {
 impl AgentView {
     /// Create an empty agent view.
     pub fn new() -> Self {
+        Self::with_theme(Theme::dark())
+    }
+
+    /// Create an empty agent view with an explicit theme.
+    pub fn with_theme(theme: Theme) -> Self {
         Self {
             agents: Vec::new(),
+            theme,
             selected: 0,
             scroll: 0,
             completed_expanded: false,
@@ -247,7 +255,7 @@ impl AgentView {
         let mut spans = vec![
             Span::styled(icon, icon_style),
             Span::styled(name, name_style),
-            Span::styled(format!("  {}", rest), theme::dim()),
+            Span::styled(format!("  {}", rest), self.theme.dim()),
         ];
         if let Some(pr) = agent.pr {
             spans.push(Span::styled(
@@ -258,7 +266,10 @@ impl AgentView {
             ));
         }
         if let Some(age) = agent.age {
-            spans.push(Span::styled(format!("  {}", fmt_age(age)), theme::dim()));
+            spans.push(Span::styled(
+                format!("  {}", fmt_age(age)),
+                self.theme.dim(),
+            ));
         }
         if selected {
             spans.insert(
@@ -289,10 +300,13 @@ impl AgentView {
             .filter(|a| a.status == AgentStatus::Completed)
             .count();
         let header = Line::from(vec![
-            Span::styled("agents", theme::tool_running()),
-            Span::styled(format!(" · {} sessions", self.agents.len()), theme::text()),
-            Span::styled(format!(" · {} working", working), theme::dim()),
-            Span::styled(format!(" · {} done", done), theme::dim()),
+            Span::styled("agents", self.theme.tool_running()),
+            Span::styled(
+                format!(" · {} sessions", self.agents.len()),
+                self.theme.text(),
+            ),
+            Span::styled(format!(" · {} working", working), self.theme.dim()),
+            Span::styled(format!(" · {} done", done), self.theme.dim()),
         ]);
         buf.set_line(area.x, area.y, &header, area.width);
         let table_area = Rect {
@@ -319,7 +333,7 @@ impl AgentView {
                     buf.set_line(
                         table_area.x,
                         y,
-                        &Line::from(Span::styled(group.title(), theme::dim())),
+                        &Line::from(Span::styled(group.title(), self.theme.dim())),
                         table_area.width,
                     );
                 }
@@ -329,7 +343,7 @@ impl AgentView {
                         y,
                         &Line::from(Span::styled(
                             format!("  … {} more (click to expand)", hidden),
-                            theme::dim(),
+                            self.theme.dim(),
                         )),
                         table_area.width,
                     );
@@ -366,6 +380,7 @@ impl AgentView {
                 Self::draw_panel(
                     area,
                     buf,
+                    &self.theme,
                     &title,
                     &lines,
                     &mut self.transcript_scroll,
@@ -376,26 +391,29 @@ impl AgentView {
                 if let Some(agent) = self.agents.get(i) {
                     let mut lines: Vec<Line<'static>> = Vec::new();
                     if !agent.activity.is_empty() {
-                        lines.push(Line::styled(agent.activity.clone(), theme::text()));
+                        lines.push(Line::styled(agent.activity.clone(), self.theme.text()));
                     }
                     if let Some(result) = &agent.result {
-                        lines.push(Line::styled(format!("result: {}", result), theme::dim()));
+                        lines.push(Line::styled(
+                            format!("result: {}", result),
+                            self.theme.dim(),
+                        ));
                     }
                     if let Some(waiting) = agent.waiting {
                         lines.push(Line::styled(
                             format!("waiting {}", fmt_age(waiting)),
-                            theme::text(),
+                            self.theme.text(),
                         ));
                     }
                     if let Some(pr) = agent.pr {
-                        lines.push(Line::styled(format!("PR #{}", pr), theme::text()));
+                        lines.push(Line::styled(format!("PR #{}", pr), self.theme.text()));
                     }
                     let reply_line = Line::from(vec![
-                        Span::styled("reply › ", theme::tool_running()),
-                        Span::styled(self.reply.clone(), theme::text()),
-                        Span::styled("▋", theme::tool_running()),
+                        Span::styled("reply › ", self.theme.tool_running()),
+                        Span::styled(self.reply.clone(), self.theme.text()),
+                        Span::styled("▋", self.theme.tool_running()),
                     ]);
-                    Self::draw_peek(area, buf, &agent.name, &lines, reply_line);
+                    Self::draw_peek(area, buf, &self.theme, &agent.name, &lines, reply_line);
                 }
             }
             None => {}
@@ -406,6 +424,7 @@ impl AgentView {
     fn draw_panel(
         area: Rect,
         buf: &mut Buffer,
+        theme: &Theme,
         title: &str,
         lines: &[Line<'static>],
         scroll: &mut u16,
@@ -419,12 +438,12 @@ impl AgentView {
             width: area.width,
             height,
         };
-        erase_overlay(buf, rect);
+        erase_overlay(buf, rect, theme);
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(theme::overlay())
-            .border_style(theme::overlay_border())
-            .title(Line::from(Span::styled(title, theme::tool_running())))
+            .style(theme.overlay())
+            .border_style(theme.overlay_border())
+            .title(Line::from(Span::styled(title, theme.tool_running())))
             .title_alignment(ratatui::layout::Alignment::Left);
         let inner = block.inner(rect);
         block.render(rect, buf);
@@ -446,6 +465,7 @@ impl AgentView {
     fn draw_peek(
         area: Rect,
         buf: &mut Buffer,
+        theme: &Theme,
         name: &str,
         lines: &[Line<'static>],
         reply: Line<'static>,
@@ -457,14 +477,14 @@ impl AgentView {
             width: area.width,
             height,
         };
-        erase_overlay(buf, rect);
+        erase_overlay(buf, rect, theme);
         let block = Block::default()
             .borders(Borders::ALL)
-            .style(theme::overlay())
-            .border_style(theme::overlay_border())
+            .style(theme.overlay())
+            .border_style(theme.overlay_border())
             .title(Line::from(Span::styled(
                 format!("peek · {}", name),
-                theme::tool_running(),
+                theme.tool_running(),
             )))
             .title_alignment(ratatui::layout::Alignment::Left);
         let inner = block.inner(rect);
@@ -630,6 +650,10 @@ impl Component for AgentView {
         self.merge_agents(agents.to_vec());
     }
 
+    fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+    }
+
     fn status(&self) -> String {
         let working = self
             .agents
@@ -666,7 +690,7 @@ impl Component for AgentView {
         if working > 0 {
             vec![FooterBadge::new(
                 format!("← {} agents", working),
-                theme::tool_running(),
+                self.theme.tool_running(),
             )]
         } else {
             Vec::new()

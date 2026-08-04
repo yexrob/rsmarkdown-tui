@@ -111,7 +111,10 @@ fn edit_request() -> PermissionRequest {
     )
     .target("crates/core/src/blocks.rs")
     .source(r#"subagent "explore""#)
-    .content(diff_lines(&Diff::parse_unified(EDIT_DIFF)))
+    .content(diff_lines(
+        &Diff::parse_unified(EDIT_DIFF),
+        &rsmarkdown_tui::renderer::theme::Theme::dark(),
+    ))
 }
 
 const EDIT_DIFF: &str = "--- a/crates/core/src/blocks.rs\n\
@@ -343,7 +346,10 @@ fn long_content_gets_tail_and_stays_bounded() {
         diff_text.push_str(&format!(" context line {}\n", i));
     }
     let mut req = edit_request();
-    req.content = diff_lines(&Diff::parse_unified(&diff_text));
+    req.content = diff_lines(
+        &Diff::parse_unified(&diff_text),
+        &rsmarkdown_tui::renderer::theme::Theme::dark(),
+    );
     let (mut app, _state) = probe_app();
     app.ask(req);
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");

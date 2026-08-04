@@ -14,7 +14,7 @@
 
 use ratatui::text::{Line, Span};
 
-use crate::renderer::theme;
+use crate::renderer::theme::Theme;
 
 /// Spinner frames (braille), cycled by the host tick.
 pub const SPINNERS: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -337,18 +337,15 @@ impl Diff {
 }
 
 /// Render a diff as styled lines: `@@` hunk headers, `-` red, `+` green.
-pub fn diff_lines(d: &Diff) -> Vec<Line<'static>> {
+pub fn diff_lines(d: &Diff, theme: &Theme) -> Vec<Line<'static>> {
     let mut out = Vec::new();
     for hunk in &d.hunks {
-        out.push(Line::styled(
-            hunk.header.clone(),
-            crate::renderer::theme::diff_hunk(),
-        ));
+        out.push(Line::styled(hunk.header.clone(), theme.diff_hunk()));
         for line in &hunk.lines {
             let (prefix, style) = match line {
-                DiffLine::Context(_) => (" ", crate::renderer::theme::diff_context()),
-                DiffLine::Removed(_) => ("-", crate::renderer::theme::diff_removed()),
-                DiffLine::Added(_) => ("+", crate::renderer::theme::diff_added()),
+                DiffLine::Context(_) => (" ", theme.diff_context()),
+                DiffLine::Removed(_) => ("-", theme.diff_removed()),
+                DiffLine::Added(_) => ("+", theme.diff_added()),
             };
             out.push(Line::from(vec![
                 ratatui::text::Span::styled(prefix.to_string(), style),
@@ -465,25 +462,25 @@ impl Activity {
     }
 }
 
-fn subagent_header(a: &SubAgent, spinner: char) -> Line<'static> {
+fn subagent_header(a: &SubAgent, spinner: char, theme: &Theme) -> Line<'static> {
     let (glyph, style) = match a.status {
-        SubAgentStatus::Running => (spinner.to_string(), theme::tool_running()),
-        SubAgentStatus::Done => ("✓".to_string(), theme::tool_done()),
-        SubAgentStatus::Error => ("✗".to_string(), theme::tool_error()),
+        SubAgentStatus::Running => (spinner.to_string(), theme.tool_running()),
+        SubAgentStatus::Done => ("✓".to_string(), theme.tool_done()),
+        SubAgentStatus::Error => ("✗".to_string(), theme.tool_error()),
     };
     let mut spans = vec![
         Span::styled(format!("{} {} ", glyph, a.name), style),
-        Span::styled(format!("({})", a.task), theme::text()),
+        Span::styled(format!("({})", a.task), theme.text()),
     ];
     if a.status != SubAgentStatus::Running {
         spans.push(Span::styled(
             format!(" · {:.1}s", a.duration_ms as f64 / 1000.0),
-            theme::dim(),
+            theme.dim(),
         ));
     }
     if let Some(r) = &a.result {
         if a.status != SubAgentStatus::Running {
-            spans.push(Span::styled(format!(" · {}", r), theme::tool_output()));
+            spans.push(Span::styled(format!(" · {}", r), theme.tool_output()));
         }
     }
     Line::from(spans)
@@ -497,13 +494,13 @@ pub const TODO_SHOWN: usize = 5;
 /// the next unfinished ones (at most [`TODO_SHOWN`]), and anything further
 /// collapses into a trailing `… +N more` line. A todo with 20 items and 5
 /// done therefore shows: `… 5 done` + 5 active items + `… +10 more`.
-pub fn todo_lines(t: &TodoList, spinner: char) -> Vec<Line<'static>> {
+pub fn todo_lines(t: &TodoList, spinner: char, theme: &Theme) -> Vec<Line<'static>> {
     let mut out = Vec::new();
     let done = t.done();
     if done > 0 {
         out.push(Line::from(vec![Span::styled(
             format!("… {} done", done),
-            theme::dim(),
+            theme.dim(),
         )]));
     }
     let active: Vec<&TodoItem> = t
@@ -513,8 +510,8 @@ pub fn todo_lines(t: &TodoList, spinner: char) -> Vec<Line<'static>> {
         .collect();
     for item in active.iter().take(TODO_SHOWN) {
         let (marker, style) = match item.status {
-            TodoStatus::Pending => (format!("[ ] "), theme::task_open()),
-            TodoStatus::InProgress => (format!("[{}] ", spinner), theme::tool_running()),
+            TodoStatus::Pending => (format!("[ ] "), theme.task_open()),
+            TodoStatus::InProgress => (format!("[{}] ", spinner), theme.tool_running()),
             TodoStatus::Done => unreachable!("filtered"),
         };
         out.push(Line::from(vec![
@@ -525,80 +522,77 @@ pub fn todo_lines(t: &TodoList, spinner: char) -> Vec<Line<'static>> {
     if active.len() > TODO_SHOWN {
         out.push(Line::from(vec![Span::styled(
             format!("… +{} more", active.len() - TODO_SHOWN),
-            theme::dim(),
+            theme.dim(),
         )]));
     }
     out
 }
 
-fn todo_header(t: &TodoList, spinner: char) -> Line<'static> {
+fn todo_header(t: &TodoList, spinner: char, theme: &Theme) -> Line<'static> {
     let marker = if t.items.iter().any(|i| i.status == TodoStatus::InProgress) {
         format!("{} ", spinner)
     } else {
         String::new()
     };
     Line::from(vec![
-        Span::styled(format!("{}todo", marker), theme::tool_running()),
-        Span::styled(format!(" · {}/{} tasks", t.done(), t.total()), theme::dim()),
-        Span::styled(format!(" · {}", t.title), theme::dim()),
+        Span::styled(format!("{}todo", marker), theme.tool_running()),
+        Span::styled(format!(" · {}/{} tasks", t.done(), t.total()), theme.dim()),
+        Span::styled(format!(" · {}", t.title), theme.dim()),
     ])
 }
 
-fn diff_header(d: &Diff) -> Line<'static> {
+fn diff_header(d: &Diff, theme: &Theme) -> Line<'static> {
     let (added, removed) = d.stats();
     Line::from(vec![
-        Span::styled("✻ Edit · ", theme::diff_edit()),
-        Span::styled(d.path.clone(), theme::text()),
-        Span::styled(format!(" · +{} −{}", added, removed), theme::diff_hunk()),
+        Span::styled("✻ Edit · ", theme.diff_edit()),
+        Span::styled(d.path.clone(), theme.text()),
+        Span::styled(format!(" · +{} −{}", added, removed), theme.diff_hunk()),
     ])
 }
 
-fn thinking_header(t: &Thinking, spinner: char) -> Line<'static> {
+fn thinking_header(t: &Thinking, spinner: char, theme: &Theme) -> Line<'static> {
     let mut spans = Vec::new();
     match t.state {
         ThinkingState::Running => {
             spans.push(Span::styled(
                 format!("{} thinking", spinner),
-                theme::thinking(),
+                theme.thinking(),
             ));
         }
         ThinkingState::Done => {
-            spans.push(Span::styled("─ thinking", theme::thinking()));
+            spans.push(Span::styled("─ thinking", theme.thinking()));
         }
     }
     spans.push(Span::styled(
         format!(" · {:.1}s", t.duration_ms as f64 / 1000.0),
-        theme::dim(),
+        theme.dim(),
     ));
     if let Some(d) = &t.digest {
         let d = crate::renderer::truncate(d, 60);
-        spans.push(Span::styled(format!(" · {}", d), theme::dim()));
+        spans.push(Span::styled(format!(" · {}", d), theme.dim()));
     }
     if t.state == ThinkingState::Done {
-        spans.push(Span::styled(" ─", theme::thinking()));
+        spans.push(Span::styled(" ─", theme.thinking()));
     }
     Line::from(spans)
 }
 
-fn tool_header(t: &ToolCall, spinner: char) -> Line<'static> {
+fn tool_header(t: &ToolCall, spinner: char, theme: &Theme) -> Line<'static> {
     let (glyph, style) = match t.status {
-        ToolStatus::Running => (spinner.to_string(), theme::tool_running()),
-        ToolStatus::Done => ("✓".to_string(), theme::tool_done()),
-        ToolStatus::Error => ("✗".to_string(), theme::tool_error()),
+        ToolStatus::Running => (spinner.to_string(), theme.tool_running()),
+        ToolStatus::Done => ("✓".to_string(), theme.tool_done()),
+        ToolStatus::Error => ("✗".to_string(), theme.tool_error()),
     };
     let mut spans = vec![
         Span::styled(format!("{} {} ", glyph, t.name), style),
-        Span::styled(t.summary.clone(), theme::text()),
+        Span::styled(t.summary.clone(), theme.text()),
     ];
     if t.status != ToolStatus::Running {
-        spans.push(Span::styled(
-            format!(" · {}ms", t.duration_ms),
-            theme::dim(),
-        ));
+        spans.push(Span::styled(format!(" · {}ms", t.duration_ms), theme.dim()));
     }
     if let Some(out) = &t.output {
         if t.status != ToolStatus::Running {
-            spans.push(Span::styled(format!(" · {}", out), theme::tool_output()));
+            spans.push(Span::styled(format!(" · {}", out), theme.tool_output()));
         }
     }
     Line::from(spans)
@@ -631,13 +625,13 @@ pub struct ActivityRowRange {
     pub is_tool: bool,
 }
 
-fn header_for(h: &Activity, spinner: char) -> Line<'static> {
+fn header_for(h: &Activity, spinner: char, theme: &Theme) -> Line<'static> {
     match &h.kind {
-        ActivityKind::Thinking(t) => thinking_header(t, spinner),
-        ActivityKind::Tool(t) => tool_header(t, spinner),
-        ActivityKind::SubAgent(a) => subagent_header(a, spinner),
-        ActivityKind::Todo(t) => todo_header(t, spinner),
-        ActivityKind::Diff(d) => diff_header(d),
+        ActivityKind::Thinking(t) => thinking_header(t, spinner, theme),
+        ActivityKind::Tool(t) => tool_header(t, spinner, theme),
+        ActivityKind::SubAgent(a) => subagent_header(a, spinner, theme),
+        ActivityKind::Todo(t) => todo_header(t, spinner, theme),
+        ActivityKind::Diff(d) => diff_header(d, theme),
     }
 }
 
@@ -667,9 +661,9 @@ fn fold_tail(act: &Activity) -> Option<String> {
 }
 
 /// Prepend `prefix` to the first span of a line.
-fn prepend_line(line: &Line<'static>, prefix: &str) -> Line<'static> {
+fn prepend_line(line: &Line<'static>, prefix: &str, theme: &Theme) -> Line<'static> {
     let mut spans = Vec::with_capacity(line.spans.len() + 1);
-    spans.push(Span::styled(prefix.to_string(), theme::tool_output()));
+    spans.push(Span::styled(prefix.to_string(), theme.tool_output()));
     spans.extend(line.spans.iter().cloned());
     Line::from(spans)
 }
@@ -684,12 +678,13 @@ fn activity_layout(
     message: usize,
     base_row: u16,
     spinner: char,
+    theme: &Theme,
     render_reply: &mut dyn FnMut(&str) -> Vec<Line<'static>>,
     depth: usize,
     prefix: &str,
     cont: &str,
 ) -> (Vec<Line<'static>>, Vec<ActivityRowRange>) {
-    let mut header = header_for(act, spinner);
+    let mut header = header_for(act, spinner, theme);
     if depth == 0 {
         // main-level activity dot (Claude Code: `⏺ Read(.mcp.json)`)
         if matches!(
@@ -698,15 +693,15 @@ fn activity_layout(
         ) {
             header
                 .spans
-                .insert(0, Span::styled("⏺ ", theme::activity_dot()));
+                .insert(0, Span::styled("⏺ ", theme.activity_dot()));
         }
     }
     if let Some(tail) = fold_tail(act) {
         header
             .spans
-            .push(Span::styled(format!(" {}", tail), theme::dim()));
+            .push(Span::styled(format!(" {}", tail), theme.dim()));
     }
-    let mut rows = vec![prepend_line(&header, prefix)];
+    let mut rows = vec![prepend_line(&header, prefix, theme)];
     let mut cursor = base_row + 1;
     let mut ranges = Vec::new();
     if act.expanded {
@@ -725,13 +720,14 @@ fn activity_layout(
                         message,
                         cursor,
                         spinner,
+                        theme,
                         render_reply,
                         depth + 1,
                         branch,
                         child_cont,
                     );
                     for line in &lines {
-                        rows.push(prepend_line(line, cont));
+                        rows.push(prepend_line(line, cont, theme));
                     }
                     cursor += lines.len() as u16;
                     ranges.extend(nested_ranges);
@@ -739,7 +735,7 @@ fn activity_layout(
                 if !a.reply.is_empty() {
                     let reply = render_reply(&a.reply);
                     for line in &reply {
-                        rows.push(prepend_line(line, &format!("{}  ", cont)));
+                        rows.push(prepend_line(line, &format!("{}  ", cont), theme));
                     }
                     cursor += reply.len() as u16;
                 }
@@ -753,7 +749,7 @@ fn activity_layout(
                     } else {
                         format!("{}  ", cont)
                     };
-                    rows.push(prepend_line(line, &p));
+                    rows.push(prepend_line(line, &p, theme));
                 }
                 cursor += act.content.len() as u16;
             }
@@ -778,6 +774,7 @@ pub fn layout_activities(
     base_row: u16,
     acts: &[Activity],
     spinner: char,
+    theme: &Theme,
     render_reply: &mut dyn FnMut(&str) -> Vec<Line<'static>>,
 ) -> (Vec<Line<'static>>, Vec<ActivityRowRange>) {
     let mut rows = Vec::new();
@@ -790,6 +787,7 @@ pub fn layout_activities(
             message,
             doc_row,
             spinner,
+            theme,
             render_reply,
             0,
             "",
@@ -822,9 +820,9 @@ pub fn activities_path_get_mut<'a>(
 
 /// Render an activity without a reply renderer (nested replies render as
 /// plain content) — used by tests and simple displays.
-pub fn activity_lines(h: &Activity, spinner: char) -> Vec<Line<'static>> {
+pub fn activity_lines(h: &Activity, spinner: char, theme: &Theme) -> Vec<Line<'static>> {
     let mut render = |_: &str| Vec::new();
-    let (rows, _) = activity_layout(h, &[0], 0, 0, spinner, &mut render, 0, "", "");
+    let (rows, _) = activity_layout(h, &[0], 0, 0, spinner, theme, &mut render, 0, "", "");
     rows
 }
 
@@ -858,13 +856,13 @@ mod tests {
     fn thinking_collapsed_and_expanded() {
         let mut h = thinking("understand", ThinkingState::Done);
         assert!(h.expandable());
-        let lines = activity_lines(&h, '⠋');
+        let lines = activity_lines(&h, '⠋', &Theme::dark());
         assert_eq!(text(&lines[0]), "─ thinking · 2.3s · checking imports ─");
         assert_eq!(lines.len(), 1, "collapsed: header only");
 
         h.toggle();
         assert!(h.is_expanded());
-        let lines = activity_lines(&h, '⠋');
+        let lines = activity_lines(&h, '⠋', &Theme::dark());
         assert_eq!(text(&lines[0]), "─ thinking · 2.3s · checking imports ─");
         assert_eq!(lines.len(), 2, "expanded: header + content");
         assert!(text(&lines[1]).contains("reasoning line"));
@@ -877,7 +875,7 @@ mod tests {
     fn running_hint_is_not_expandable() {
         let h = thinking("understand", ThinkingState::Running);
         assert!(!h.expandable());
-        let lines = activity_lines(&h, '⠋');
+        let lines = activity_lines(&h, '⠋', &Theme::dark());
         assert_eq!(text(&lines[0]), "⠋ thinking · 2.3s");
     }
 
@@ -894,14 +892,14 @@ mod tests {
             Line::styled("$ cargo test -p core", Style::default()),
             Line::styled("54 passed; 0 failed", Style::default()),
         ]);
-        let lines = activity_lines(&h, '⠙');
+        let lines = activity_lines(&h, '⠙', &Theme::dark());
         assert_eq!(
             text(&lines[0]),
             "⏺ ✓ bash cargo test -p core · 12ms · 54 passed … +2 lines (click to expand)"
         );
 
         h.toggle();
-        let lines = activity_lines(&h, '⠙');
+        let lines = activity_lines(&h, '⠙', &Theme::dark());
         assert!(text(&lines[1]).contains("$ cargo test -p core"));
         assert!(text(&lines[2]).contains("54 passed; 0 failed"));
     }
@@ -935,7 +933,7 @@ mod tests {
         };
         assert_eq!(todo.done(), 1);
         assert_eq!(todo.total(), 3);
-        let lines = todo_lines(&todo, '⠋');
+        let lines = todo_lines(&todo, '⠋', &Theme::dark());
         assert!(
             text(&lines[0]).starts_with("… 1 done"),
             "{}",
@@ -947,7 +945,7 @@ mod tests {
         todo.set(2, TodoStatus::Done);
         assert_eq!(todo.done(), 2);
 
-        let header = todo_header(&todo, '⠋');
+        let header = todo_header(&todo, '⠋', &Theme::dark());
         assert!(text(&header).contains("2/3 tasks"), "{}", text(&header));
     }
 
@@ -970,7 +968,7 @@ mod tests {
             title: "Big".to_string(),
             items,
         };
-        let lines = todo_lines(&todo, '⠋');
+        let lines = todo_lines(&todo, '⠋', &Theme::dark());
         assert_eq!(lines.len(), 7, "1 done + 5 active + 1 tail");
         assert!(text(&lines[0]).starts_with("… 5 done"));
         assert!(
@@ -993,7 +991,7 @@ mod tests {
                 })
                 .collect(),
         };
-        let lines = todo_lines(&all_done, '⠋');
+        let lines = todo_lines(&all_done, '⠋', &Theme::dark());
         assert_eq!(lines.len(), 1);
         assert!(text(&lines[0]).starts_with("… 3 done"));
     }
@@ -1002,7 +1000,7 @@ mod tests {
     fn subagent_running_and_done() {
         let mut a = SubAgent::running("explore", "Find the parser");
         a.duration_ms = 1200;
-        let l = subagent_header(&a, '⠋');
+        let l = subagent_header(&a, '⠋', &Theme::dark());
         assert!(
             text(&l).starts_with("⠋ explore (Find the parser)"),
             "{}",
@@ -1018,7 +1016,7 @@ mod tests {
             transcript: Vec::new(),
             reply: String::new(),
         };
-        let l = subagent_header(&done, '⠋');
+        let l = subagent_header(&done, '⠋', &Theme::dark());
         assert!(
             text(&l).starts_with("✓ explore (Find the parser)"),
             "{}",
@@ -1036,7 +1034,7 @@ mod tests {
         assert_eq!(d.hunks.len(), 1);
         assert_eq!(d.hunks[0].header, "@@ -1,2 +1,3 @@");
         assert_eq!(d.stats(), (1, 1));
-        let lines = diff_lines(&d);
+        let lines = diff_lines(&d, &Theme::dark());
         assert_eq!(text(&lines[0]), "@@ -1,2 +1,3 @@");
         assert!(text(&lines[1]).starts_with(" ctx"), "{}", text(&lines[1]));
         assert!(text(&lines[2]).starts_with("-old"), "{}", text(&lines[2]));
@@ -1075,7 +1073,7 @@ mod tests {
             reply: String::new(),
         }));
         sub.expanded = true;
-        let lines = activity_lines(&sub, '⠋');
+        let lines = activity_lines(&sub, '⠋', &Theme::dark());
         assert!(
             text(&lines[0]).starts_with("⏺ ✓ explore (Find the parser)"),
             "{}",
@@ -1096,7 +1094,7 @@ mod tests {
 
         // collapsed: fold tail counts the steps
         sub.expanded = false;
-        let lines = activity_lines(&sub, '⠋');
+        let lines = activity_lines(&sub, '⠋', &Theme::dark());
         assert!(
             text(&lines[0]).contains("2 steps (click to expand)"),
             "{}",
@@ -1107,7 +1105,7 @@ mod tests {
     #[test]
     fn diff_activity_header() {
         let d = Diff::parse_unified("--- a/x.rs\n+++ b/x.rs\n@@ -1 +1 @@\n-a\n+b\n");
-        let header = diff_header(&d);
+        let header = diff_header(&d, &Theme::dark());
         assert_eq!(text(&header), "✻ Edit · x.rs · +1 −1");
     }
 }
