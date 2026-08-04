@@ -11,6 +11,7 @@ use crate::component::Component;
 
 const MAX_LINES: usize = 10_000;
 
+/// Streaming plain-text log component.
 pub struct TextReader {
     lines: Vec<Line<'static>>,
     scroll: u16,
@@ -25,6 +26,7 @@ impl Default for TextReader {
 }
 
 impl TextReader {
+    /// Create an empty log; it starts generating entries on tick.
     pub fn new() -> Self {
         Self {
             lines: Vec::new(),

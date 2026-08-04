@@ -13,6 +13,7 @@ use ratatui_image::sliced::SlicedProtocol;
 use crate::component::Component;
 use crate::image;
 
+/// Scrollable image viewer using the best terminal graphics protocol.
 pub struct ImagePane {
     picker: Picker,
     sliced: Option<SlicedProtocol>,
@@ -57,6 +58,7 @@ impl ImagePane {
         true
     }
 
+    /// Load an image from decoded pixels.
     pub fn load_image(&mut self, img: DynamicImage, name: String) {
         let cells = (60u16, 18u16);
         self.sliced = image::sliced_for(&self.picker, img, cells).into();
@@ -64,6 +66,7 @@ impl ImagePane {
         self.scroll = 0;
     }
 
+    /// Image height in terminal rows.
     pub fn total_rows(&self) -> u16 {
         self.sliced.as_ref().map(|s| s.size().height).unwrap_or(0)
     }

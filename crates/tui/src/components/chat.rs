@@ -1,7 +1,7 @@
 //! Agent chat component: a Claude Code-style session with foldable thinking
 //! and tool-call hints, plus streaming markdown replies.
 //!
-//! Thinking and tool calls share the same [`Hint`] abstraction — both can be
+//! Thinking and tool calls share the same [`Activity`] abstraction — both can be
 //! expanded/collapsed with `[enter]`/`[space]`; only their presentation
 //! differs (reasoning text vs tool I/O). The agent is scripted (no real LLM):
 //! every user message triggers a turn of thinking -> tool calls -> markdown.
@@ -24,12 +24,17 @@ use crate::component::Component;
 use crate::renderer::{theme, StreamMarkdownRenderer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Message role in the chat transcript.
 pub enum Role {
+    /// A user message.
     User,
+    /// An assistant message.
     Assistant,
 }
 
+/// One message: role, text, and (assistant-only) activities.
 pub struct ChatMessage {
+    /// User or assistant.
     pub role: Role,
     /// User text or assistant markdown source.
     pub text: String,
@@ -188,6 +193,7 @@ const REASONING_COMPOSE: [&str; 2] = [
     "Summarizing the architecture and the verification results.",
 ];
 
+/// Agent chat component with a scripted demo turn (thinking -> subagent -> tools -> reply).
 pub struct AgentChat {
     processor: MarkdownProcessor,
     renderer: StreamMarkdownRenderer,
@@ -208,6 +214,7 @@ pub struct AgentChat {
 }
 
 impl AgentChat {
+    /// Create a chat component (demo: one scripted turn runs immediately).
     pub fn new() -> Self {
         let mut this = Self {
             processor: MarkdownProcessor::default(),
@@ -710,10 +717,12 @@ impl AgentChat {
 
     // --- test/diagnostic helpers ---
 
+    /// Whether the scripted turn has finished (diagnostic).
     pub fn phase_done(&self) -> bool {
         self.phase.is_none()
     }
 
+    /// Number of messages (diagnostic).
     pub fn message_count(&self) -> usize {
         self.messages.len()
     }

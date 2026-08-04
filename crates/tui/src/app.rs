@@ -24,11 +24,14 @@ use crate::renderer::theme;
 /// `⏸ plan mode on`, `← for agents`, `PR #446`).
 #[derive(Debug, Clone)]
 pub struct FooterBadge {
+    /// Badge text (may contain glyphs).
     pub text: String,
+    /// Badge style (color / modifiers).
     pub style: ratatui::style::Style,
 }
 
 impl FooterBadge {
+    /// Create a badge.
     pub fn new(text: impl Into<String>, style: ratatui::style::Style) -> Self {
         Self {
             text: text.into(),
@@ -41,12 +44,16 @@ impl FooterBadge {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SessionMode {
     #[default]
+    /// Standard permission mode — no badge.
     Default,
+    /// Auto-accept file edits (`⏵⏵ accept edits on`).
     AcceptEdits,
+    /// Read-only plan mode (`⏸ plan mode on`).
     Plan,
 }
 
 impl SessionMode {
+    /// The mode after this one.
     pub fn next(self) -> Self {
         match self {
             SessionMode::Default => SessionMode::AcceptEdits,
@@ -74,13 +81,18 @@ impl SessionMode {
 /// Review status of a pull request badge (underline color encodes it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrStatus {
+    /// PR approved (green).
     Approved,
+    /// PR pending review (yellow).
     Pending,
+    /// Changes requested (red).
     ChangesRequested,
+    /// Draft PR (gray).
     Draft,
 }
 
 impl PrStatus {
+    /// Underline color for this status.
     pub fn color(self) -> ratatui::style::Color {
         match self {
             PrStatus::Approved => ratatui::style::Color::LightGreen,
@@ -91,10 +103,15 @@ impl PrStatus {
     }
 }
 
+/// Component host: event loop, focus routing, mouse translation, footer badges.
 pub struct App {
+    /// Mounted components, in tab order.
     components: Vec<Box<dyn Component>>,
+    /// Index of the focused component.
     focused: usize,
+    /// Host tick interval.
     tick: Duration,
+    /// When the last tick fired.
     last_tick: Instant,
     /// Content area of the last frame — used to translate mouse coordinates
     /// into component-local space before routing.
@@ -106,6 +123,7 @@ pub struct App {
 }
 
 impl App {
+    /// Create an app with the given components.
     pub fn new(components: Vec<Box<dyn Component>>) -> Self {
         Self {
             components,
@@ -118,19 +136,23 @@ impl App {
         }
     }
 
+    /// Index of the focused component.
     pub fn focused(&self) -> usize {
         self.focused
     }
 
+    /// Mounted components, in tab order.
     pub fn components(&self) -> usize {
         self.components.len()
     }
 
+    /// Focus the next component.
     pub fn focus_next(&mut self) {
         self.focused = (self.focused + 1) % self.components.len();
         self.last_tick = Instant::now();
     }
 
+    /// Focus the previous component.
     pub fn focus_prev(&mut self) {
         self.focused = (self.focused + self.components.len() - 1) % self.components.len();
         self.last_tick = Instant::now();

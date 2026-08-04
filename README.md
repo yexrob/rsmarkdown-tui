@@ -138,6 +138,34 @@ cargo run -p rsmarkdown-tui --example headless   # full markdown pipeline
 cargo test -p rsmarkdown-tui                     # incl. component smoke tests
 ```
 
+## Using as a library
+
+The TUI is a library, not a markdown viewer — the demo binary only consumes
+it. Custom apps assemble [`App`] with their own [`Component`]s:
+
+```rust
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use rsmarkdown_tui::{App, Component, run_tui};
+
+struct Hello;
+
+impl Component for Hello {
+    fn title(&self) -> &str { "hello" }
+    fn draw(&mut self, area: Rect, buf: &mut Buffer) {
+        buf.set_string(area.x, area.y, "hello", ratatui::style::Style::default());
+    }
+}
+
+let mut app = App::new(vec![Box::new(Hello)]);
+run_tui(&mut app)?;
+```
+
+The public API is fully documented (`cargo doc -p rsmarkdown-tui --open`):
+activity model, footer badges, image backend, and the markdown renderer are
+all reusable pieces. `crates/tui/examples/custom.rs` shows a self-contained
+custom component with `+`/`-` interaction and a footer badge.
+
 ## Performance
 
 Two tools:

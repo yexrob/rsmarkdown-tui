@@ -1,6 +1,6 @@
 //! Claude Code-style agent hints: thinking blocks and tool calls.
 //!
-//! Both share one abstraction: a [`Hint`] is a foldable pane — a collapsed
+//! Both share one abstraction: an [`Activity`] is a foldable pane — a collapsed
 //! header line plus optional expandable content. The only difference between
 //! thinking and tool calls is their *presentation* ([`ActivityKind`]): thinking
 //! reveals reasoning text, tools reveal the command and its output.
@@ -19,30 +19,50 @@ use crate::renderer::theme;
 /// Spinner frames (braille), cycled by the host tick.
 pub const SPINNERS: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
+/// Braille spinner frame for the given tick.
 pub fn spinner(frame: u64) -> char {
     SPINNERS[(frame as usize) % SPINNERS.len()]
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Lifecycle of a tool call.
 pub enum ToolStatus {
+    /// The tool is executing.
     Running,
+    /// The tool finished successfully.
     Done,
+    /// The tool failed.
     Error,
 }
 
 /// A tool invocation: `✓ bash · cargo test · 12ms`.
 #[derive(Debug, Clone)]
+/// A tool invocation shown in a transcript.
+/// Header: `✓ bash · cargo test · 12ms`; expanded content shows the
+/// command and its output.
+
 pub struct ToolCall {
+    /// Tool name (e.g. `bash`, `Edit`).
     pub name: &'static str,
+    /// Running / done / error.
     pub status: ToolStatus,
     /// Brief command / argument summary.
+    /// Brief command / argument summary.
     pub summary: String,
+    /// Elapsed time in milliseconds.
+
+    /// Elapsed time in milliseconds.
+
+    /// Elapsed time in milliseconds.
     pub duration_ms: u64,
     /// One-line output preview shown next to the header.
+    /// One-line output preview shown in the header.
     pub output: Option<String>,
 }
 
 impl ToolCall {
+    /// Start a running tool call.
+
     pub fn running(name: &'static str, summary: impl Into<String>) -> Self {
         Self {
             name,
@@ -55,18 +75,29 @@ impl ToolCall {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Whether a reasoning block is still running.
+
 pub enum ThinkingState {
+    /// Still reasoning.
     Running,
+    /// Reasoning finished.
     Done,
 }
 
 /// A reasoning block: `⠋ thinking · 1.4s` -> `─ thinking · 1.4s ─`.
 #[derive(Debug, Clone)]
+/// A reasoning block: `⠋ thinking · 1.4s` -> `─ thinking · 1.4s ─`.
+
 pub struct Thinking {
+    /// Running or done.
     pub state: ThinkingState,
+    /// Elapsed time in milliseconds.
     pub duration_ms: u64,
     /// Collapsed digest shown once done.
+    /// Collapsed digest shown once done.
     pub digest: Option<String>,
+    /// Distinguishes consecutive reasoning stages so running/done updates
+    /// replace the right hint.
     /// Distinguishes consecutive reasoning stages so running/done updates
     /// replace the right hint.
     pub stage: &'static str,
@@ -74,35 +105,54 @@ pub struct Thinking {
 
 /// Todo lifecycle (mirrors Claude Code: pending -> in_progress -> completed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Todo lifecycle (pending -> in_progress -> completed).
+
 pub enum TodoStatus {
+    /// Not started.
     Pending,
+    /// Being worked on.
     InProgress,
+    /// Completed.
     Done,
 }
 
 #[derive(Debug, Clone)]
+/// One checklist item.
+
 pub struct TodoItem {
+    /// Item text.
     pub text: String,
+    /// Current lifecycle state.
     pub status: TodoStatus,
 }
 
 /// A task checklist, rendered as `- [ ]` / `- [⠋]` / `- [x]` items.
 #[derive(Debug, Clone)]
+/// A task checklist, rendered as `- [ ]` / `- [⠋]` / `- [x]` items.
+
 pub struct TodoList {
+    /// Checklist title.
     pub title: String,
+    /// Items in order.
     pub items: Vec<TodoItem>,
 }
 
 impl TodoList {
+    /// Number of completed items.
+
     pub fn done(&self) -> usize {
         self.items
             .iter()
             .filter(|i| i.status == TodoStatus::Done)
             .count()
     }
+    /// Total item count.
+
     pub fn total(&self) -> usize {
         self.items.len()
     }
+    /// Update one item's status.
+
     pub fn set(&mut self, index: usize, status: TodoStatus) {
         if let Some(item) = self.items.get_mut(index) {
             item.status = status;
@@ -117,28 +167,48 @@ impl TodoList {
 /// transcript — the same activity kinds as the main agent (todos, thinking,
 /// tool calls, …) plus a final markdown reply.
 #[derive(Debug, Clone)]
+/// A delegated subagent (`<agent name> (<task description>)`).
+///
+/// Its expanded view shows a **nested transcript** — the same activity
+/// kinds as the main agent (todos, thinking, tool calls) plus a final
+/// markdown reply.
+
 pub struct SubAgent {
+    /// Agent name (e.g. `explore`).
     pub name: String,
+    /// Running / done / error.
     pub status: SubAgentStatus,
     /// Short task description shown next to the name.
+    /// Short task description shown next to the name.
     pub task: String,
+    /// Elapsed time in milliseconds.
     pub duration_ms: u64,
+    /// One-line result preview once done.
     /// One-line result preview once done.
     pub result: Option<String>,
     /// The subagent's own transcript (recursively foldable).
+    /// The subagent's own transcript (recursively foldable).
     pub transcript: Vec<Activity>,
+    /// The subagent's final markdown reply.
     /// The subagent's final markdown reply.
     pub reply: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Lifecycle of a delegated subagent.
+
 pub enum SubAgentStatus {
+    /// The agent is working.
     Running,
+    /// The agent finished.
     Done,
+    /// The agent failed.
     Error,
 }
 
 impl SubAgent {
+    /// Start a running subagent.
+
     pub fn running(name: impl Into<String>, task: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -164,29 +234,44 @@ pub fn auto_expand(h: &Activity) -> bool {
 
 /// One line of a unified diff.
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// One line of a unified diff.
+
 pub enum DiffLine {
+    /// Unchanged context line.
     Context(String),
+    /// A removed (`-`) line.
     Removed(String),
+    /// An added (`+`) line.
     Added(String),
 }
 
 /// One hunk of a unified diff.
 #[derive(Debug, Clone)]
+/// One hunk of a unified diff.
+
 pub struct Hunk {
     /// `@@ -a,b +c,d @@`
+    /// `@@ -a,b +c,d @@`
     pub header: String,
+    /// Context / removed / added lines.
     pub lines: Vec<DiffLine>,
 }
 
 /// A file edit, rendered as a git-style unified diff.
 #[derive(Debug, Clone)]
+/// A file edit, rendered as a git-style unified diff.
+
 pub struct Diff {
+    /// File path.
     pub path: String,
+    /// Hunks in order.
     pub hunks: Vec<Hunk>,
 }
 
 impl Diff {
     /// Count added / removed lines across all hunks.
+    /// Count added / removed lines across all hunks.
+
     pub fn stats(&self) -> (usize, usize) {
         let mut added = 0;
         let mut removed = 0;
@@ -282,10 +367,17 @@ fn hunk_line_text(line: &DiffLine) -> String {
 /// What a hint is about — the presentation differs, the foldable behavior
 /// does not.
 #[derive(Debug, Clone)]
+/// What an activity is about — the presentation differs, the foldable
+/// behavior does not.
+
 pub enum ActivityKind {
+    /// A reasoning block.
     Thinking(Thinking),
+    /// A tool invocation.
     Tool(ToolCall),
+    /// A delegated subagent with a nested transcript.
     SubAgent(SubAgent),
+    /// A task checklist.
     Todo(TodoList),
     /// A file edit, shown as a unified diff.
     Diff(Diff),
@@ -316,15 +408,25 @@ pub(crate) enum ActivityId {
 /// A foldable agent hint. Both thinking blocks and tool calls are this one
 /// type: a header line plus expandable content.
 #[derive(Debug, Clone)]
+/// A foldable agent activity: a collapsed header plus expandable content.
+///
+/// Every kind (thinking, tool call, subagent, todo, diff) shares the same
+/// expand/collapse capability; only the presentation differs.
+
 pub struct Activity {
+    /// Which kind of activity.
     pub kind: ActivityKind,
+    /// Collapsed (`false`) or expanded (`true`).
     /// Collapsed (`false`) or expanded (`true`).
     pub expanded: bool,
     /// Full content revealed when expanded (reasoning text / tool I/O).
+    /// Content revealed when expanded (reasoning text / tool I/O / items).
     pub content: Vec<Line<'static>>,
 }
 
 impl Activity {
+    /// Create a collapsed activity.
+
     pub fn new(kind: ActivityKind) -> Self {
         Self {
             kind,
@@ -334,18 +436,26 @@ impl Activity {
     }
 
     /// Expand or collapse.
+    /// Expand or collapse.
+
     pub fn toggle(&mut self) {
         self.expanded = !self.expanded;
     }
 
     /// Whether expansion reveals anything at all.
+    /// Whether expansion reveals anything at all.
+
     pub fn expandable(&self) -> bool {
         !self.content.is_empty()
     }
 
+    /// Whether the activity is expanded.
+
     pub fn is_expanded(&self) -> bool {
         self.expanded
     }
+
+    /// Set the expanded content.
 
     pub fn set_content(&mut self, content: Vec<Line<'static>>) {
         self.content = content;
@@ -477,11 +587,19 @@ fn tool_header(t: &ToolCall, spinner: char) -> Line<'static> {
 /// `[]` is a message-level activity, `[s]` an activity inside subagent `s`,
 /// `[s, n]` an activity nested one level deeper.
 #[derive(Debug, Clone)]
+/// A clickable row range of an activity (document coordinates).
+
 pub struct ActivityRowRange {
+    /// First row (inclusive).
     pub start: u16,
+    /// Last row (exclusive).
     pub end: u16,
+    /// Message index the activity belongs to.
     pub message: usize,
+    /// Address inside nested subagent transcripts (`[s, n]` = activity `n`
+    /// inside subagent `s`).
     pub path: Vec<usize>,
+    /// Whether the activity is a tool call.
     pub is_tool: bool,
 }
 

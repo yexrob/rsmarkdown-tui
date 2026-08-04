@@ -10,11 +10,13 @@ use ratatui::text::{Line, Span};
 use crate::component::Component;
 use crate::renderer::theme;
 
+/// A task-list row.
 pub struct TodoItem {
     text: &'static str,
     done: bool,
 }
 
+/// Selectable task list component.
 pub struct ListView {
     items: Vec<TodoItem>,
     selected: usize,
@@ -22,6 +24,7 @@ pub struct ListView {
 }
 
 impl ListView {
+    /// A demo task list.
     pub fn todo_examples() -> Self {
         let items = [
             "Stream a markdown document",

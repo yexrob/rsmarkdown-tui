@@ -32,6 +32,7 @@ struct LoadedImage {
     sliced: SlicedProtocol,
 }
 
+/// Streaming markdown viewer component (demo doc + stress mode).
 pub struct MarkdownViewer {
     processor: MarkdownProcessor,
     renderer: StreamMarkdownRenderer,
@@ -57,6 +58,7 @@ impl Default for MarkdownViewer {
 }
 
 impl MarkdownViewer {
+    /// Create the viewer; the demo document starts streaming immediately.
     pub fn new() -> Self {
         let mut this = Self {
             processor: MarkdownProcessor::default(),

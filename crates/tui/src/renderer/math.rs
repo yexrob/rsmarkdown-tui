@@ -5,6 +5,7 @@
 //! innomd. Unknown commands fall back to their plain name; anything exotic
 //! degrades to readable ASCII rather than failing.
 
+/// Convert LaTeX math to Unicode text for terminal display.
 pub fn latex_to_unicode(src: &str) -> String {
     // stray `$` are pipeline artifacts (single-dollar rewrite), not content
     let clean: String = src.chars().filter(|c| *c != '$').collect();

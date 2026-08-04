@@ -28,6 +28,7 @@ impl Default for StreamMarkdownRenderer {
 }
 
 impl StreamMarkdownRenderer {
+    /// Create a renderer for the given wrap width.
     pub fn new(width: usize) -> Self {
         Self {
             width,
@@ -36,6 +37,7 @@ impl StreamMarkdownRenderer {
         }
     }
 
+    /// Change the wrap width (invalidates the per-block cache).
     pub fn set_width(&mut self, width: usize) {
         if self.width != width {
             self.width = width;
@@ -477,7 +479,9 @@ fn push_line(lines: &mut Vec<Line<'static>>, current: &mut Vec<Span<'static>>) {
 // helpers
 // ---------------------------------------------------------------------------
 
+/// Display-width helpers for strings (CJK-aware).
 pub trait WidthExt {
+    /// Terminal display width in columns.
     fn width(&self) -> usize;
 }
 
@@ -487,6 +491,7 @@ impl WidthExt for str {
     }
 }
 
+/// Flatten inline AST to plain text.
 pub fn plain_text(inlines: &[Inline]) -> String {
     let mut out = String::new();
     for i in inlines {
@@ -507,6 +512,7 @@ pub fn plain_text(inlines: &[Inline]) -> String {
     out
 }
 
+/// Display width of an inline run.
 pub fn plain_width(inlines: &[Inline]) -> usize {
     plain_text(inlines).width()
 }
