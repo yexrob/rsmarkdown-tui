@@ -80,7 +80,8 @@ fn host_routes_clicks_to_component() {
         .expect("redraw");
     let rows = buffer_text(terminal.backend().buffer());
     assert!(
-        rows.iter().any(|r| r.contains("… 5 done")),
+        rows.iter().any(|r| r.contains("… 2 done"))
+            && rows.iter().any(|r| r.contains("[x] Verify the result")),
         "todo priority view after the click"
     );
 }

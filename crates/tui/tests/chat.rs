@@ -209,7 +209,7 @@ fn finished_activities_collapse_by_default() {
         "finished todo items collapsed:\n{text}"
     );
     assert!(
-        !text.contains("… 5 done"),
+        !text.contains("… 2 done"),
         "todo items not rendered while collapsed:\n{text}"
     );
     assert!(
@@ -231,8 +231,8 @@ fn finished_activities_collapse_by_default() {
     assert!(chat.event(click(todo_row)), "click on todo header");
     let text = chat.conversation_text();
     assert!(
-        text.contains("… 5 done"),
-        "todo priority view after click:\n{text}"
+        text.contains("… 2 done") && text.contains("[x] Verify the result"),
+        "todo priority view after click (fold + last done rows):\n{text}"
     );
 }
 

@@ -488,20 +488,39 @@ fn subagent_header(a: &SubAgent, spinner: char, theme: &Theme) -> Line<'static> 
 
 /// Max todo items shown in the priority view (the active items window).
 pub const TODO_SHOWN: usize = 5;
+/// Finished items kept visible at the tail of the done section; older
+/// ones collapse into the leading `… N done` line.
+pub const DONE_SHOWN: usize = 3;
 
-/// Render a todo list with priority folding: finished items collapse into
-/// a leading `… N done` line, the window shows the in-progress item plus
-/// the next unfinished ones (at most [`TODO_SHOWN`]), and anything further
-/// collapses into a trailing `… +N more` line. A todo with 20 items and 5
-/// done therefore shows: `… 5 done` + 5 active items + `… +10 more`.
+/// Render a todo list with priority folding: the finished section shows
+/// the *last* [`DONE_SHOWN`] completed items (older ones collapse into a
+/// leading `… N done`), the window shows the in-progress item plus the
+/// next unfinished ones (at most [`TODO_SHOWN`]), and anything further
+/// collapses into a trailing `… +N more` line. A todo with 20 items and
+/// 5 done renders: `… 2 done` + 3 `[x]` rows + 5 active rows + `… +10
+/// more`; one that is fully done shows the last three `[x]` rows.
 pub fn todo_lines(t: &TodoList, spinner: char, theme: &Theme) -> Vec<Line<'static>> {
     let mut out = Vec::new();
-    let done = t.done();
-    if done > 0 {
+    let done_indices: Vec<usize> = t
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| i.status == TodoStatus::Done)
+        .map(|(i, _)| i)
+        .collect();
+    let shown_done = done_indices.len().min(DONE_SHOWN);
+    let hidden_done = done_indices.len() - shown_done;
+    if hidden_done > 0 {
         out.push(Line::from(vec![Span::styled(
-            format!("… {} done", done),
+            format!("… {} done", hidden_done),
             theme.dim(),
         )]));
+    }
+    for &idx in done_indices.iter().skip(hidden_done) {
+        out.push(Line::from(vec![
+            Span::styled("[x] ".to_string(), theme.task_done()),
+            Span::styled(t.items[idx].text.clone(), theme.task_done()),
+        ]));
     }
     let active: Vec<&TodoItem> = t
         .items
@@ -934,11 +953,8 @@ mod tests {
         assert_eq!(todo.done(), 1);
         assert_eq!(todo.total(), 3);
         let lines = todo_lines(&todo, '⠋', &Theme::dark());
-        assert!(
-            text(&lines[0]).starts_with("… 1 done"),
-            "{}",
-            text(&lines[0])
-        );
+        // one done <= DONE_SHOWN: shown in full, no fold
+        assert!(text(&lines[0]).starts_with("[x] a"), "{}", text(&lines[0]));
         assert!(text(&lines[1]).starts_with("[⠋] "), "{}", text(&lines[1]));
         assert!(text(&lines[2]).starts_with("[ ] "), "{}", text(&lines[2]));
 
@@ -951,7 +967,7 @@ mod tests {
 
     #[test]
     fn todo_priority_folding() {
-        // 20 items, 5 done: leading ellipsis + 5 active + trailing tail
+        // 20 items, 5 done: 2 folded + last 3 done + 5 active + tail
         let items: Vec<TodoItem> = (0..20)
             .map(|i| TodoItem {
                 text: format!("item {}", i),
@@ -969,22 +985,27 @@ mod tests {
             items,
         };
         let lines = todo_lines(&todo, '⠋', &Theme::dark());
-        assert_eq!(lines.len(), 7, "1 done + 5 active + 1 tail");
-        assert!(text(&lines[0]).starts_with("… 5 done"));
+        assert_eq!(lines.len(), 10, "1 fold + 3 done + 5 active + 1 tail");
+        assert!(text(&lines[0]).starts_with("… 2 done"), "older done folded");
         assert!(
-            text(&lines[1]).starts_with("[⠋] item 5"),
+            text(&lines[1]).starts_with("[x] item 2"),
+            "tail of done kept"
+        );
+        assert!(text(&lines[3]).starts_with("[x] item 4"), "last done shown");
+        assert!(
+            text(&lines[4]).starts_with("[⠋] item 5"),
             "in-progress first in window"
         );
         assert!(
-            text(&lines[5]).starts_with("[ ] item 9"),
+            text(&lines[8]).starts_with("[ ] item 9"),
             "window capped at 5"
         );
-        assert!(text(&lines[6]).starts_with("… +10 more"), "trailing tail");
+        assert!(text(&lines[9]).starts_with("… +10 more"), "trailing tail");
 
-        // all done: only the leading ellipsis
+        // fully done: the last DONE_SHOWN rows stay visible
         let all_done = TodoList {
             title: "All".to_string(),
-            items: (0..3)
+            items: (0..8)
                 .map(|i| TodoItem {
                     text: format!("item {}", i),
                     status: TodoStatus::Done,
@@ -992,8 +1013,28 @@ mod tests {
                 .collect(),
         };
         let lines = todo_lines(&all_done, '⠋', &Theme::dark());
-        assert_eq!(lines.len(), 1);
-        assert!(text(&lines[0]).starts_with("… 3 done"));
+        assert_eq!(lines.len(), 4, "1 fold + last 3 done");
+        assert!(text(&lines[0]).starts_with("… 5 done"));
+        assert!(text(&lines[1]).starts_with("[x] item 5"), "last done kept");
+        assert!(
+            text(&lines[3]).starts_with("[x] item 7"),
+            "very last done shown"
+        );
+
+        // few done items: no fold at all
+        let few = TodoList {
+            title: "Few".to_string(),
+            items: (0..3)
+                .map(|i| TodoItem {
+                    text: format!("item {}", i),
+                    status: TodoStatus::Done,
+                })
+                .collect(),
+        };
+        let lines = todo_lines(&few, '⠋', &Theme::dark());
+        assert_eq!(lines.len(), 3);
+        assert!(text(&lines[0]).starts_with("[x] item 0"));
+        assert!(text(&lines[2]).starts_with("[x] item 2"));
     }
 
     #[test]
