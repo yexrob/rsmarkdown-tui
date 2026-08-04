@@ -195,9 +195,11 @@ and **collapse back when finished** — a click reopens them, and a manual
 click survives subsequent updates. Todo checklists deliberately render as
 ordinary blocks in the document flow (never pinned or auto-expanded): the
 header stays in the transcript and scrolls with the content; a click
-reveals the priority-folded window — finished items collapse to a leading
-`… N done`, the window shows the in-progress + next unfinished items (at
-most 5), and the rest collapse to a trailing `… +N more`.
+reveals the priority-folded window — the finished section keeps the last
+3 completed items visible (older ones collapse to a leading `… N done`),
+the window shows the in-progress + next unfinished items (at most 5), and
+the rest collapse to a trailing `… +N more`; a fully done list shows its
+last three `[x]` rows instead of a bare count.
 
 ## Theming
 
