@@ -7,6 +7,7 @@
 //! every user message triggers a turn of thinking -> tool calls -> markdown.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
@@ -20,6 +21,7 @@ use crate::activities::{
     self, activities_path_get_mut, Activity, ActivityKind, ActivityRowRange, Diff, SubAgent,
     SubAgentStatus, Thinking, ThinkingState, TodoItem, TodoList, TodoStatus, ToolCall, ToolStatus,
 };
+use crate::agent::Agent;
 use crate::command_menu::{SlashCommand, SlashCommandMenu};
 use crate::component::Component;
 use crate::help::{HelpEntry, HelpPanel, HelpSection};
@@ -1191,6 +1193,43 @@ impl Component for AgentChat {
             .source(r#"subagent "explore""#)
             .content(activities::diff_lines(&diff)),
         )
+    }
+
+    fn agents(&self) -> Vec<Agent> {
+        // demo: broadcast the subagent sessions of the last assistant
+        // message, newest first, one row per agent name
+        use crate::agent::{Agent, AgentColor, AgentStatus};
+        let mut out: Vec<Agent> = Vec::new();
+        for msg in self.messages.iter().rev() {
+            if msg.role != Role::Assistant {
+                continue;
+            }
+            for hint in msg.hints.iter().rev() {
+                if let ActivityKind::SubAgent(sub) = &hint.kind {
+                    if out.iter().any(|a| a.name == sub.name) {
+                        continue;
+                    }
+                    let status = match sub.status {
+                        SubAgentStatus::Running => AgentStatus::Working,
+                        SubAgentStatus::Done => AgentStatus::Completed,
+                        SubAgentStatus::Error => AgentStatus::Failed,
+                    };
+                    let mut agent = Agent::new(sub.name.clone(), status)
+                        .description(sub.task.clone())
+                        .color(AgentColor::from_name(&sub.name))
+                        .age(Duration::from_millis(sub.duration_ms));
+                    agent.activity = if sub.status == SubAgentStatus::Running {
+                        format!("working on {}", sub.task)
+                    } else {
+                        sub.result.clone().unwrap_or_else(|| "done".to_string())
+                    };
+                    agent.result = sub.result.clone();
+                    agent.transcript_lines = activities::activity_lines(hint, '⠿');
+                    out.push(agent);
+                }
+            }
+        }
+        out
     }
 
     fn status(&self) -> String {

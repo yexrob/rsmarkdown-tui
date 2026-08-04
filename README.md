@@ -178,6 +178,16 @@ confirms); `?` toggles a grouped keybinding panel. Both are reusable
 library pieces (`SlashCommandMenu`, `HelpPanel`); the demo wires `/clear`
 and `/help`.
 
+## Agent overview
+
+`AgentView` renders a Claude Code Agent View style session table (Pinned /
+Ready for review / Needs input / Working / Completed, status icons with a
+Working animation, PR + age columns, collapsed `… N more` tails, transcript
+and peek overlays). The host broadcasts agent state between components:
+any component publishes [`Component::agents`], every component receives the
+merged table via [`Component::absorb_agents`] — the demo chat feeds its
+subagents to the overview with no coupling.
+
 ## Performance
 
 Two tools:

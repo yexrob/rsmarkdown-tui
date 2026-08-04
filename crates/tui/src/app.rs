@@ -304,15 +304,35 @@ impl App {
         }
     }
 
-    /// Advance the focused component by one tick, then raise any permission
-    /// request it asks for (as a modal dialog).
+    /// Advance the focused component by one tick, broadcast agent sessions
+    /// (components publish via [`Component::agents`], all components receive
+    /// the merged table via [`Component::absorb_agents`]), then raise any
+    /// permission request the focused component asks for.
     pub fn tick_components(&mut self) {
         if self.permission.is_some() {
             return; // modal: the dialog owns the session
         }
-        let focused = &mut self.components[self.focused];
-        focused.on_tick();
+        {
+            let focused = &mut self.components[self.focused];
+            focused.on_tick();
+        }
+        // agent broadcast: merge every component's sessions by name (last
+        // publisher wins) and deliver to all components
+        let mut merged: Vec<crate::agent::Agent> = Vec::new();
+        for component in &self.components {
+            for agent in component.agents() {
+                if let Some(slot) = merged.iter_mut().find(|a| a.name == agent.name) {
+                    *slot = agent;
+                } else {
+                    merged.push(agent);
+                }
+            }
+        }
+        for component in &mut self.components {
+            component.absorb_agents(&merged);
+        }
         if self.permission.is_none() {
+            let focused = &mut self.components[self.focused];
             if let Some(request) = focused.on_ask() {
                 self.ask(request);
             }

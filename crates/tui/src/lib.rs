@@ -44,6 +44,7 @@
 #![warn(missing_docs)]
 
 pub mod activities;
+pub mod agent;
 pub mod app;
 pub mod command_menu;
 pub mod component;

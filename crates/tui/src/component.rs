@@ -6,6 +6,7 @@ use crossterm::event::Event;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
+use crate::agent::Agent;
 use crate::app::FooterBadge;
 use crate::permission::{DialogAction, PermissionRequest};
 
@@ -56,4 +57,17 @@ pub trait Component {
     /// The modal permission dialog was closed with this action (only called
     /// if a dialog was actually open).
     fn on_dialog_closed(&mut self, _action: DialogAction) {}
+
+    /// Agent sessions this component wants to broadcast to the host. The
+    /// host merges all components' broadcasts each tick and delivers the
+    /// combined table to every component via [`Self::absorb_agents`] — so
+    /// an overview component (e.g. [`crate::components::agent_view::AgentView`])
+    /// collects agents from siblings without knowing them.
+    fn agents(&self) -> Vec<Agent> {
+        Vec::new()
+    }
+
+    /// Receive the merged agent table broadcast by the host (see
+    /// [`Self::agents`]). Default: ignore.
+    fn absorb_agents(&mut self, _agents: &[Agent]) {}
 }
