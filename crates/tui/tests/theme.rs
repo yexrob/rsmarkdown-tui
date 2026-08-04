@@ -47,6 +47,74 @@ fn chat_input_line_uses_theme() {
 }
 
 #[test]
+fn permission_dialog_follows_app_theme() {
+    let mut app = App::new(vec![Box::new(AgentChat::new())]);
+    app.set_theme(Theme::light());
+    use rsmarkdown_tui::permission::PermissionRequest;
+    app.ask(PermissionRequest::new(
+        "Edit file",
+        "Do you want to proceed?",
+        vec!["Yes".to_string()],
+    ));
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).expect("backend");
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    let r = app.dialog_rect();
+    let cell = terminal
+        .backend()
+        .buffer()
+        .cell((r.x + 2, r.y + r.height - 2))
+        .expect("dialog padding cell");
+    assert_eq!(
+        cell.bg,
+        Theme::light().overlay_bg,
+        "dialog overlay matches the light theme, not dark"
+    );
+}
+
+#[test]
+fn command_menu_follows_chat_theme() {
+    let mut app = App::new(vec![Box::new(AgentChat::new())]);
+    app.set_theme(Theme::light());
+    // open the slash menu: / in an empty prompt
+    for _ in 0..400 {
+        app.tick_components();
+    }
+    let esc = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Esc,
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    app.route(esc); // dismiss the demo permission dialog (chat stays in typing)
+    app.route(crossterm::event::Event::Key(
+        crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('/'),
+            crossterm::event::KeyModifiers::NONE,
+        ),
+    ));
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).expect("backend");
+    terminal
+        .draw(|f| app.draw_frame(f.area(), f.buffer_mut()))
+        .expect("draw");
+    let chat = app.component_mut(0);
+    let _ = chat; // menu rect via buffer scan
+                  // find a menu row: "/clear" is drawn inside the menu
+    let buf = terminal.backend().buffer();
+    let mut found = false;
+    for y in 0..30u16 {
+        for x in 0..100u16 {
+            if buf.cell((x, y)).map(|c| c.symbol()).unwrap_or("") == "/" {
+                let bg = buf.cell((x, y)).expect("cell").bg;
+                if bg == Theme::light().overlay_bg {
+                    found = true;
+                }
+            }
+        }
+    }
+    assert!(found, "menu rows carry the light overlay background");
+}
+
+#[test]
 fn dark_and_light_are_distinct() {
     assert_ne!(Theme::dark(), Theme::light());
     assert_eq!(

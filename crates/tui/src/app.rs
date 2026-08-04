@@ -345,7 +345,7 @@ impl App {
 
     /// Open a modal permission dialog (replaces one already open).
     pub fn ask(&mut self, request: PermissionRequest) {
-        self.permission = Some(PermissionDialog::new(request));
+        self.permission = Some(PermissionDialog::with_theme(request, self.theme.clone()));
         self.dialog_action = None;
         self.last_tick = Instant::now();
     }
@@ -426,6 +426,10 @@ impl App {
         self.theme = theme.clone();
         for component in &mut self.components {
             component.set_theme(theme.clone());
+        }
+        if let Some(dialog) = &mut self.permission {
+            // an open dialog follows the theme switch too
+            dialog.theme = theme;
         }
     }
 

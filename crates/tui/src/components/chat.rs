@@ -284,60 +284,63 @@ impl AgentChat {
     }
 
     /// Demo keybinding sections for the `?` panel.
-    fn demo_help() -> HelpPanel {
-        HelpPanel::new(vec![
-            HelpSection {
-                title: "chat",
-                entries: vec![
-                    HelpEntry {
-                        keys: "enter",
-                        description: "send message",
-                    },
-                    HelpEntry {
-                        keys: "esc",
-                        description: "view transcript",
-                    },
-                    HelpEntry {
-                        keys: "j/k",
-                        description: "scroll",
-                    },
-                    HelpEntry {
-                        keys: "click",
-                        description: "expand / collapse a hint",
-                    },
-                ],
-            },
-            HelpSection {
-                title: "prompt",
-                entries: vec![
-                    HelpEntry {
-                        keys: "/",
-                        description: "open the command menu",
-                    },
-                    HelpEntry {
-                        keys: "?",
-                        description: "toggle this panel",
-                    },
-                ],
-            },
-            HelpSection {
-                title: "host",
-                entries: vec![
-                    HelpEntry {
-                        keys: "tab",
-                        description: "next component",
-                    },
-                    HelpEntry {
-                        keys: "m",
-                        description: "cycle session mode",
-                    },
-                    HelpEntry {
-                        keys: "q",
-                        description: "quit",
-                    },
-                ],
-            },
-        ])
+    fn demo_help(theme: &Theme) -> HelpPanel {
+        HelpPanel::with_theme(
+            vec![
+                HelpSection {
+                    title: "chat",
+                    entries: vec![
+                        HelpEntry {
+                            keys: "enter",
+                            description: "send message",
+                        },
+                        HelpEntry {
+                            keys: "esc",
+                            description: "view transcript",
+                        },
+                        HelpEntry {
+                            keys: "j/k",
+                            description: "scroll",
+                        },
+                        HelpEntry {
+                            keys: "click",
+                            description: "expand / collapse a hint",
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "prompt",
+                    entries: vec![
+                        HelpEntry {
+                            keys: "/",
+                            description: "open the command menu",
+                        },
+                        HelpEntry {
+                            keys: "?",
+                            description: "toggle this panel",
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "host",
+                    entries: vec![
+                        HelpEntry {
+                            keys: "tab",
+                            description: "next component",
+                        },
+                        HelpEntry {
+                            keys: "m",
+                            description: "cycle session mode",
+                        },
+                        HelpEntry {
+                            keys: "q",
+                            description: "quit",
+                        },
+                    ],
+                },
+            ],
+            theme.clone(),
+        )
     }
 
     /// Run a confirmed demo slash command.
@@ -1043,7 +1046,7 @@ impl Component for AgentChat {
             self.menu_rect = Rect::default();
         }
         if self.help_open {
-            Self::demo_help().draw(area, buf);
+            Self::demo_help(&self.theme).draw(area, buf);
         }
     }
 
@@ -1068,8 +1071,10 @@ impl Component for AgentChat {
                             if c == '/' && self.input.is_empty() {
                                 // `/` in an empty prompt opens the command menu
                                 // (the symbol stays in the input as the trigger)
-                                self.slash_menu =
-                                    Some(SlashCommandMenu::new(Self::demo_commands()));
+                                self.slash_menu = Some(SlashCommandMenu::with_theme(
+                                    Self::demo_commands(),
+                                    self.theme.clone(),
+                                ));
                                 self.input.push(c);
                             } else if c == '?' && self.input.is_empty() {
                                 self.help_open = true;
@@ -1185,9 +1190,13 @@ impl Component for AgentChat {
 
     fn set_theme(&mut self, theme: Theme) {
         self.theme = theme.clone();
-        self.renderer.theme = theme;
+        self.renderer.theme = theme.clone();
         self.rendered.clear();
         self.reply_cache.clear();
+        if let Some(menu) = &mut self.slash_menu {
+            // an open menu follows the theme switch too
+            menu.theme = theme;
+        }
     }
 
     fn on_ask(&mut self) -> Option<PermissionRequest> {
