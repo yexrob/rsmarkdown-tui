@@ -207,7 +207,8 @@ impl PermissionDialog {
 
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(theme::dim())
+            .style(theme::overlay())
+            .border_style(theme::permission())
             .title(Line::from(Span::styled(
                 self.request.title.clone(),
                 theme::permission(),

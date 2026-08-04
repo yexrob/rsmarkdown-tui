@@ -420,7 +420,8 @@ impl AgentView {
         };
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(theme::dim())
+            .style(theme::overlay())
+            .border_style(theme::overlay_border())
             .title(Line::from(Span::styled(title, theme::tool_running())))
             .title_alignment(ratatui::layout::Alignment::Left);
         let inner = block.inner(rect);
@@ -456,7 +457,8 @@ impl AgentView {
         };
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(theme::dim())
+            .style(theme::overlay())
+            .border_style(theme::overlay_border())
             .title(Line::from(Span::styled(
                 format!("peek · {}", name),
                 theme::tool_running(),

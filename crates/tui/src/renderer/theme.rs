@@ -184,3 +184,13 @@ pub fn permission_selected() -> Style {
         .fg(Color::LightYellow)
         .add_modifier(Modifier::BOLD)
 }
+/// Solid background for floating overlays (permission dialog, command
+/// menu, help panel) so their content stays readable over the transcript.
+pub fn overlay() -> Style {
+    Style::default().bg(Color::Rgb(18, 18, 18))
+}
+/// Overlay border, slightly brighter than the default dim border so the
+/// panel separates from the content behind it.
+pub fn overlay_border() -> Style {
+    Style::default().fg(Color::Gray)
+}

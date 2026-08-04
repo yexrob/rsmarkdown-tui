@@ -164,6 +164,26 @@ fn mouse_click_selects_then_confirms() {
 }
 
 #[test]
+fn overlay_background_separates_from_transcript() {
+    let mut menu = SlashCommandMenu::new(commands());
+    let area = Rect::new(0, 0, 100, 50);
+    let mut buf = Buffer::empty(area);
+    let r = menu.draw(area, &mut buf);
+    let inner_cell = buf.cell((r.x + 2, r.y + 1)).expect("inner cell");
+    assert_eq!(
+        inner_cell.bg,
+        ratatui::style::Color::Rgb(18, 18, 18),
+        "solid overlay background"
+    );
+    let border_cell = buf.cell((r.x, r.y)).expect("border cell");
+    assert_eq!(
+        border_cell.fg,
+        ratatui::style::Color::Gray,
+        "brighter border"
+    );
+}
+
+#[test]
 fn menu_title_shows_live_filter() {
     let mut menu = SlashCommandMenu::new(commands());
     menu.set_filter("mo");

@@ -179,6 +179,38 @@ fn dialog_draws_title_target_question_and_options() {
 }
 
 #[test]
+fn overlay_background_separates_from_transcript() {
+    let (mut app, _state) = probe_app();
+    app.ask(edit_request());
+    let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("test backend");
+    draw(&mut app, &mut terminal);
+    let r = app.dialog_rect();
+    // the bottom padding row of the dialog carries the solid overlay bg,
+    // hiding whatever the transcript rendered behind it
+    let pad_cell = terminal
+        .backend()
+        .buffer()
+        .cell((r.x + 2, r.y + r.height - 2))
+        .expect("padding cell");
+    assert_eq!(
+        pad_cell.bg,
+        ratatui::style::Color::Rgb(18, 18, 18),
+        "solid overlay background"
+    );
+    // the border uses the permission accent
+    let border_cell = terminal
+        .backend()
+        .buffer()
+        .cell((r.x, r.y))
+        .expect("border cell");
+    assert_eq!(
+        border_cell.fg,
+        ratatui::style::Color::LightYellow,
+        "permission-colored border"
+    );
+}
+
+#[test]
 fn esc_cancels_and_notifies_component() {
     let (mut app, state) = probe_app();
     app.ask(edit_request());

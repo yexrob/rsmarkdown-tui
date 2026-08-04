@@ -80,7 +80,8 @@ impl HelpPanel {
         };
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(theme::dim())
+            .style(theme::overlay())
+            .border_style(theme::overlay_border())
             .title(Line::from(Span::styled(
                 "Keyboard shortcuts",
                 theme::tool_running(),
