@@ -172,7 +172,7 @@ fn overlay_background_separates_from_transcript() {
     let inner_cell = buf.cell((r.x + 2, r.y + 1)).expect("inner cell");
     assert_eq!(
         inner_cell.bg,
-        ratatui::style::Color::Rgb(18, 18, 18),
+        ratatui::style::Color::Reset,
         "solid overlay background"
     );
     let border_cell = buf.cell((r.x, r.y)).expect("border cell");

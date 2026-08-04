@@ -225,7 +225,7 @@ fn overlay_background_separates_from_transcript() {
         .expect("padding cell");
     assert_eq!(
         pad_cell.bg,
-        ratatui::style::Color::Rgb(18, 18, 18),
+        ratatui::style::Color::Reset,
         "solid overlay background"
     );
     // the border uses the permission accent

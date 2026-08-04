@@ -115,6 +115,14 @@ fn command_menu_follows_chat_theme() {
 }
 
 #[test]
+fn overlay_background_follows_theme() {
+    // dark: panels melt into the terminal background (no dark box)
+    assert_eq!(Theme::dark().overlay_bg, Color::Reset);
+    // light: near-white tint for the light terminal
+    assert_eq!(Theme::light().overlay_bg, Color::Rgb(248, 248, 248));
+}
+
+#[test]
 fn dark_and_light_are_distinct() {
     assert_ne!(Theme::dark(), Theme::light());
     assert_eq!(

@@ -381,7 +381,7 @@ fn slash_in_empty_prompt_opens_command_menu() {
     let cell = buf.cell((r.x + 5, r.y + 1)).expect("menu inner cell");
     assert_eq!(
         cell.bg,
-        ratatui::style::Color::Rgb(18, 18, 18),
+        ratatui::style::Color::Reset,
         "menu area covered with the overlay background"
     );
 }

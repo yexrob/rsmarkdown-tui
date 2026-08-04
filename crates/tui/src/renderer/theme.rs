@@ -88,7 +88,9 @@ pub struct Theme {
     pub status_fg: Color,
     /// Unfocused / single-component status bar.
     pub status_inactive: Color,
-    /// Solid background of floating overlays (panels, menus, dialogs).
+    /// Background of floating overlays (panels, menus, dialogs). `Reset`
+    /// melts the panel into the terminal's own background (dark theme);
+    /// light themes use a near-white tint.
     pub overlay_bg: Color,
     /// Overlay border.
     pub overlay_border: Color,
@@ -137,7 +139,10 @@ impl Theme {
             status_bg: Color::LightCyan,
             status_fg: Color::Black,
             status_inactive: Color::DarkGray,
-            overlay_bg: Color::Rgb(18, 18, 18),
+            // panels melt into the terminal's own background (Claude Code
+            // dialogs are not dark boxes); the overlay still erases content
+            // behind the panel, Reset simply shows the terminal background
+            overlay_bg: Color::Reset,
             overlay_border: Color::Gray,
         }
     }
@@ -400,7 +405,11 @@ mod tests {
         assert_eq!(t.text(), Style::default().fg(Color::Reset));
         assert_eq!(t.claude, Color::LightCyan);
         assert_eq!(t.success, Color::LightGreen);
-        assert_eq!(t.overlay_bg, Color::Rgb(18, 18, 18));
+        assert_eq!(
+            t.overlay_bg,
+            Color::Reset,
+            "dark panels melt into the terminal"
+        );
     }
 
     #[test]
