@@ -170,6 +170,12 @@ impl App {
         self.status_bar = enabled;
     }
 
+    /// Open the host task area (Claude Code: `set_expanded_view: "tasks"` —
+    /// a task tool call asks the host to surface the checklist).
+    pub fn expand_tasks(&mut self) {
+        self.task_list_open = true;
+    }
+
     /// Index of the focused component.
     pub fn focused(&self) -> usize {
         self.focused
