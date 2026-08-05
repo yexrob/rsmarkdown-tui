@@ -213,18 +213,6 @@ fn is_word_char(c: char) -> bool {
     c.is_alphanumeric()
 }
 
-fn is_word_char_at(content: &str, index: usize) -> bool {
-    // 调用方可能给非边界（marker 前一字节跨多字节字符）：向后对齐到字符边界。
-    let mut i = index;
-    while i < content.len() && !content.is_char_boundary(i) {
-        i += 1;
-    }
-    content
-        .get(i..)
-        .and_then(|s| s.chars().next())
-        .is_some_and(is_word_char)
-}
-
 pub fn is_underscore_inside_word(content: &str, start: usize, len: usize) -> bool {
     // start 是 marker 的字节偏移（边界）；前一个字符从边界往前取整字符，
     // 避免 start - 1 落在多字节字符中间（曾导致 char boundary panic）。
