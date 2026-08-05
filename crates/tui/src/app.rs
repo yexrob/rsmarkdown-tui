@@ -136,6 +136,9 @@ pub struct App {
     task_list_open: bool,
     /// Merged checklist from all components ([`Component::tasks`]).
     tasks: Vec<TodoItem>,
+    /// Task area rect reserved by the last layout pass (bottom-docked;
+    /// the focused component draws above it so the input line stays visible).
+    task_area: Option<Rect>,
     /// Frame counter (task area spinner animation).
     tick_counter: u64,
     /// When false, the bottom status bar is not drawn and the component
@@ -160,6 +163,7 @@ impl App {
             theme: Theme::dark(),
             task_list_open: false,
             tasks: Vec::new(),
+            task_area: None,
             tick_counter: 0,
             status_bar: true,
         }
@@ -233,6 +237,24 @@ impl App {
         } else {
             (area, None)
         };
+        // 任务区底部预留：组件（含输入框）在缩小区域里自适应，任务框不遮挡。
+        let content_area = if self.task_list_open && !self.tasks.is_empty() {
+            let shown = self.tasks.len().min(5);
+            let height = (shown as u16 + 2).min(content_area.height);
+            if height >= 2 {
+                let [content, tasks] =
+                    Layout::vertical([Constraint::Min(0), Constraint::Length(height)])
+                        .areas(content_area);
+                self.task_area = Some(tasks);
+                content
+            } else {
+                self.task_area = None;
+                content_area
+            }
+        } else {
+            self.task_area = None;
+            content_area
+        };
         self.content_area = content_area;
 
         let (title, status_text, hints, n) = {
@@ -252,8 +274,8 @@ impl App {
         // Runs regardless of the status bar (hosts may disable it).
         if let Some(dialog) = &mut self.permission {
             self.dialog_rect = dialog.draw(content_area, buf);
-        } else {
-            self.draw_task_list(content_area, buf);
+        } else if let Some(task_rect) = self.task_area {
+            self.draw_task_list(task_rect, buf);
         }
 
         let Some(status_area) = status_area else {
@@ -308,7 +330,8 @@ impl App {
     }
 
     /// Bottom-docked task list area (Claude Code: `Ctrl+T` toggles the
-    /// to-do checklist, up to five tasks shown).
+    /// to-do checklist, up to five tasks shown). `area` is the reserved
+    /// strip from the layout pass — draw fills it completely.
     fn draw_task_list(&mut self, area: Rect, buf: &mut Buffer) {
         if !self.task_list_open || self.tasks.is_empty() {
             return;
