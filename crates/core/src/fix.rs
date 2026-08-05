@@ -106,7 +106,7 @@ pub fn strip_closed_code_blocks(text: &str) -> String {
 
 fn fix_code_block(content: &str) -> String {
     if is_inside_unclosed_code_block(content) {
-        if let Some(rel) = content.rfind("```") {
+        if let Some(rel) = memchr::memmem::rfind(content.as_bytes(), b"```") {
             let after_fence = &content[rel + 3..];
             let has_newline = after_fence.contains('\n');
             let first_line = after_fence.split('\n').next().unwrap_or("");
@@ -139,7 +139,7 @@ fn fix_inline_code(content: &str) -> String {
                 continue;
             }
             if crate::scan::is_triple_backtick_at(last_para.as_bytes(), i) {
-                if let Some(close_rel) = last_para[i + 3..].find("```") {
+                if let Some(close_rel) = memchr::memmem::find(&last_para.as_bytes()[i + 3..], b"```") {
                     i += 3 + close_rel + 3 - 1;
                     continue;
                 }
@@ -227,7 +227,7 @@ pub fn fix_html(content: &str) -> String {
         return content.to_string();
     }
     let visible = &content[..ws_offset];
-    let Some(fragment_start) = visible.rfind('<') else {
+    let Some(fragment_start) = memchr::memrchr(b'<', visible.as_bytes()) else {
         return content.to_string();
     };
     if fragment_start > 0 && content.as_bytes()[fragment_start - 1] == b'\\' {
@@ -349,7 +349,7 @@ fn get_defined_footnote_labels(content: &str) -> std::collections::HashSet<Strin
         .iter()
         .map(|&(start, _)| {
             let inner = &without_code[start + 2..];
-            let end = inner.find(']').unwrap_or(0);
+            let end = memchr::memchr(b']', inner.as_bytes()).unwrap_or(0);
             inner[..end].to_string()
         })
         .collect()
@@ -385,8 +385,7 @@ fn remove_incomplete_ref_in_last_paragraph(content: &str) -> String {
     if is_position_in_ranges(abs, &code_ranges) || is_position_in_ranges(abs, &inline_ranges) {
         return content.to_string();
     }
-    let line_end = last_para[incomplete_pos..]
-        .find('\n')
+    let line_end = memchr::memchr(b'\n', &last_para.as_bytes()[incomplete_pos..])
         .map(|p| incomplete_pos + p)
         .unwrap_or(last_para.len());
     let mut ref_start = incomplete_pos;
@@ -514,7 +513,7 @@ pub fn fix_link(content: &str) -> String {
             None
         };
         if let Some(b) = bracket {
-            let pos = last_line.rfind(b).unwrap();
+            let pos = memchr::memmem::rfind(last_line.as_bytes(), b.as_bytes()).unwrap();
             let before = last_line[..pos].trim_end_matches(is_ws).to_string();
             let mut new_lines: Vec<&str> = lines.clone();
             new_lines[last_non_empty as usize] = &before;
@@ -546,7 +545,7 @@ pub fn fix_link(content: &str) -> String {
 
 /// `/!?\[[^\]]*$/` — a `[` or `![` with no `]` afterwards (to end of string).
 fn has_incomplete_bracket(text: &str) -> bool {
-    text.rfind('[')
+    memchr::memrchr(b'[', text.as_bytes())
         .is_some_and(|p| !text[p + 1..].contains(']'))
 }
 
@@ -556,7 +555,7 @@ fn ends_with_incomplete_link_text(text: &str) -> bool {
     if !t.ends_with(']') {
         return false;
     }
-    let Some(p) = t.rfind('[') else {
+    let Some(p) = memchr::memrchr(b'[', t.as_bytes()) else {
         return false;
     };
     !t[p + 1..t.len() - 1].contains(']')
@@ -570,7 +569,7 @@ fn ends_with_incomplete_url(text: &str) -> bool {
     while i < bytes.len() {
         if bytes[i] == b'[' || (bytes[i] == b'!' && bytes.get(i + 1) == Some(&b'[')) {
             let label_start = if bytes[i] == b'!' { i + 1 } else { i };
-            if let Some(rel) = text[label_start..].find(']') {
+            if let Some(rel) = memchr::memchr(b']', &text.as_bytes()[label_start..]) {
                 let after = label_start + rel + 1;
                 if text[after..].starts_with('(') {
                     let rest = &text[after + 1..];
@@ -1088,7 +1087,7 @@ pub fn fix_strong(content: &str, options: &PreprocessOptions) -> String {
         {
             return content.to_string();
         }
-        let pos = no_math.rfind("**").unwrap_or(0);
+        let pos = memchr::memmem::rfind(no_math.as_bytes(), b"**").unwrap_or(0);
         if !no_math[pos + 2..].trim().is_empty() {
             needs_asterisk_completion = true;
         } else {
@@ -1106,7 +1105,7 @@ pub fn fix_strong(content: &str, options: &PreprocessOptions) -> String {
             {
                 return content.to_string();
             }
-            let pos = marker_counted.rfind("__").unwrap_or(0);
+            let pos = memchr::memmem::rfind(marker_counted.as_bytes(), b"__").unwrap_or(0);
             if !marker_counted[pos + 2..].trim().is_empty() {
                 needs_underscore_completion = true;
             } else {
@@ -1123,7 +1122,7 @@ pub fn fix_strong(content: &str, options: &PreprocessOptions) -> String {
         removed_trailing_single = true;
         let (no_math2, _) = strong_counting_text(&content, options);
         if count_of(&no_math2, "**") % 2 == 1 {
-            let pos = no_math2.rfind("**").unwrap_or(0);
+            let pos = memchr::memmem::rfind(no_math2.as_bytes(), b"**").unwrap_or(0);
             if !no_math2[pos + 2..].trim().is_empty() {
                 needs_asterisk_completion = true;
                 needs_asterisk_removal = false;
@@ -1139,7 +1138,7 @@ pub fn fix_strong(content: &str, options: &PreprocessOptions) -> String {
         removed_trailing_single = true;
         let (_, marker_counted2) = strong_counting_text(&content, options);
         if count_of(&marker_counted2, "__") % 2 == 1 {
-            let pos = marker_counted2.rfind("__").unwrap_or(0);
+            let pos = memchr::memmem::rfind(marker_counted2.as_bytes(), b"__").unwrap_or(0);
             if !marker_counted2[pos + 2..].trim().is_empty() {
                 needs_underscore_completion = true;
                 needs_underscore_removal = false;
@@ -1161,7 +1160,7 @@ pub fn fix_strong(content: &str, options: &PreprocessOptions) -> String {
     if needs_underscore_removal {
         let (_, offset2) = last_paragraph_range(&content, false);
         let new_para = &content[offset2..];
-        let pos = new_para.rfind("__").unwrap_or(0);
+        let pos = memchr::memmem::rfind(new_para.as_bytes(), b"__").unwrap_or(0);
         let absolute = offset2 + pos;
         let mut result = content[..absolute].trim_end().to_string();
         result = remove_trailing_standalone_dash(&result);
@@ -1169,8 +1168,8 @@ pub fn fix_strong(content: &str, options: &PreprocessOptions) -> String {
     }
 
     if needs_asterisk_completion && needs_underscore_completion {
-        let first_star = no_math.find("**").unwrap_or(usize::MAX);
-        let first_us = marker_counted.find("__").unwrap_or(usize::MAX);
+        let first_star = memchr::memmem::find(no_math.as_bytes(), b"**").unwrap_or(usize::MAX);
+        let first_us = memchr::memmem::find(marker_counted.as_bytes(), b"__").unwrap_or(usize::MAX);
         if first_star < first_us {
             return append_before_trailing_whitespace(&content, "__**");
         }
@@ -1379,8 +1378,8 @@ pub fn fix_emphasis(content: &str) -> String {
     }
 
     if needs_asterisk_completion && needs_underscore_completion {
-        let first_star = without_double_star.find('*').unwrap_or(usize::MAX);
-        let first_us = without_double_us.find('_').unwrap_or(usize::MAX);
+        let first_star = memchr::memchr(b'*', without_double_star.as_bytes()).unwrap_or(usize::MAX);
+        let first_us = memchr::memchr(b'_', without_double_us.as_bytes()).unwrap_or(usize::MAX);
         if first_star < first_us {
             return format!("{}_*", content);
         }
@@ -1420,7 +1419,7 @@ pub fn fix_delete(content: &str) -> String {
         let no_urls2 = remove_urls_from_text(&no_code2);
         let count2 = count_of(&no_urls2, "~~");
         if count2 % 2 == 1 {
-            let last_pos = no_urls2.rfind("~~").unwrap_or(0);
+            let last_pos = memchr::memmem::rfind(no_urls2.as_bytes(), b"~~").unwrap_or(0);
             if (last_pos > 0 || no_urls2.starts_with("~~")) && !no_urls2[last_pos + 2..].is_empty()
             {
                 return format!("{}~", content);
@@ -1462,7 +1461,7 @@ pub fn fix_delete(content: &str) -> String {
         {
             return content.to_string();
         }
-        let after_last = no_urls[no_urls.rfind("~~").unwrap_or(0) + 2..].to_string();
+        let after_last = no_urls[memchr::memmem::rfind(no_urls.as_bytes(), b"~~").unwrap_or(0) + 2..].to_string();
         if !after_last.trim().is_empty() {
             return format!("{}~~", content);
         }

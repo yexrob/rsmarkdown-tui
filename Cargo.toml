@@ -11,6 +11,7 @@ repository = "https://github.com/example/rsmarkdown-tui"
 [workspace.dependencies]
 pulldown-cmark = "0.13"
 unicode-width = "0.2"
+memchr = "2"
 
 [profile.release]
 lto = true

@@ -69,7 +69,7 @@ pub fn preprocess_latex(content: &str) -> String {
     let mut restored = String::with_capacity(processed.len());
     let mut ph_pos = 0;
     let mut block_idx = 0;
-    while let Some(rel) = processed[ph_pos..].find(CODE_BLOCK_PLACEHOLDER) {
+    while let Some(rel) = memchr::memmem::find(&processed.as_bytes()[ph_pos..], CODE_BLOCK_PLACEHOLDER.as_bytes()) {
         restored.push_str(&processed[ph_pos..ph_pos + rel]);
         restored.push_str(&code_blocks[block_idx].replace('$', DOLLAR_PLACEHOLDER));
         ph_pos += rel + CODE_BLOCK_PLACEHOLDER.len();
@@ -88,7 +88,7 @@ fn replace_bracket_math(content: &str, multiline: bool) -> String {
         let ch = content[i..].chars().next().expect("char at boundary");
         if ch == '\\' && content[i + 1..].starts_with('[') {
             let rest = &content[i + 2..];
-            if let Some(rel) = rest.find("\\]") {
+            if let Some(rel) = memchr::memmem::find(rest.as_bytes(), b"\\]") {
                 let equation = &rest[..rel];
                 let span_len = equation.len();
                 if (multiline || !equation.contains('\n')) && (span_len > 0 || equation.is_empty())
@@ -110,10 +110,10 @@ fn replace_bracket_math(content: &str, multiline: bool) -> String {
 fn replace_paren_math(content: &str) -> String {
     let mut out = String::with_capacity(content.len());
     let mut i = 0;
-    while let Some(rel) = content[i..].find("\\(") {
+    while let Some(rel) = memchr::memmem::find(&content.as_bytes()[i..], b"\\(") {
         let open = i + rel;
         let rest = &content[open + 2..];
-        let Some(close_rel) = rest.find("\\)") else {
+        let Some(close_rel) = memchr::memmem::find(rest.as_bytes(), b"\\)") else {
             break;
         };
         let equation = &rest[..close_rel];
@@ -144,7 +144,7 @@ fn replace_dollar_math(content: &str) -> String {
         let prefix_ok = i == 0 || bytes[i - 1] != b'\\';
         let part_of_double = bytes.get(i + 1) == Some(&b'$') || (i > 0 && bytes[i - 1] == b'$');
         if bytes[i] == b'$' && prefix_ok && !part_of_double {
-            if let Some(rel) = content[i + 1..].find('$') {
+            if let Some(rel) = memchr::memchr(b'$', &content.as_bytes()[i + 1..]) {
                 let equation = &content[i + 1..i + 1 + rel];
                 if !equation.is_empty() && !equation.contains('\n') {
                     out.push_str(&content[span_start..i]);

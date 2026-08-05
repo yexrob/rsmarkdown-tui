@@ -7,6 +7,7 @@ description = "Streaming markdown core: normalize -> preprocess -> block split -
 
 [dependencies]
 pulldown-cmark = { workspace = true }
+memchr = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

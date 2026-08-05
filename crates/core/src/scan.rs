@@ -1,5 +1,21 @@
 //! Byte-level scanning helpers ported from `markmend/core/src/preprocess/utils.ts`
 //! and `pattern.ts`. All positions are byte offsets into the original string.
+//!
+//! ASCII needles are searched with memchr: in UTF-8, ASCII bytes never occur
+//! inside multi-byte chars, so the returned offsets are always char
+//! boundaries — safe to slice with.
+
+/// memchr 版 count（ASCII needle：偏移天然边界，SIMD 加速）。
+pub fn count_of(text: &str, needle: &str) -> usize {
+    let needle = needle.as_bytes();
+    let mut count = 0;
+    let mut rest = text.as_bytes();
+    while let Some(pos) = memchr::memmem::find(rest, needle) {
+        count += 1;
+        rest = &rest[pos + needle.len()..];
+    }
+    count
+}
 
 /// JS `\s` (without unicode flag): space, tab, newline, CR, FF, VT.
 pub fn is_ws(c: char) -> bool {
@@ -35,31 +51,18 @@ pub fn trailing_ws_offset(s: &str) -> usize {
     end
 }
 
-/// Count occurrences of an ASCII needle.
-pub fn count_of(text: &str, needle: &str) -> usize {
-    let mut count = 0;
-    let mut rest = text;
-    while let Some(pos) = rest.find(needle) {
-        count += 1;
-        rest = &rest[pos + needle.len()..];
-    }
-    count
-}
-
 /// `/```[\s\S]*?```/g` — all closed fenced code ranges `[start, end)`.
 pub fn find_closed_code_block_ranges(content: &str) -> Vec<(usize, usize)> {
+    let bytes = content.as_bytes();
     let mut ranges = Vec::new();
     let mut search = 0;
-    loop {
-        let Some(start) = content[search..].find("```") else {
-            break;
-        };
-        let start = search + start;
+    while let Some(rel) = memchr::memmem::find(&bytes[search..], b"```") {
+        let start = search + rel;
         let after = start + 3;
-        let Some(rel) = content[after..].find("```") else {
+        let Some(rel2) = memchr::memmem::find(&bytes[after..], b"```") else {
             break;
         };
-        let end = after + rel + 3;
+        let end = after + rel2 + 3;
         ranges.push((start, end));
         search = end;
     }
@@ -258,11 +261,11 @@ fn replace_complete_links(text: &str) -> String {
         let is_image = rest.starts_with("![");
         if ch == '[' || (is_image && ch == '!') {
             let label_start = i + usize::from(is_image);
-            if let Some(close_rel) = text[label_start..].find(']') {
+            if let Some(close_rel) = memchr::memchr(b']', &text.as_bytes()[label_start..]) {
                 let after_label = label_start + close_rel + 1;
                 if text[after_label..].starts_with('(') {
                     let paren_rest = &text[after_label + 1..];
-                    if let Some(cp) = paren_rest.find(')') {
+                    if let Some(cp) = memchr::memchr(b')', paren_rest.as_bytes()) {
                         out.push_str(&text[i..after_label]);
                         out.push_str("()");
                         i = after_label + 1 + cp + 1;
@@ -286,7 +289,7 @@ fn replace_incomplete_link_suffix(text: &str) -> String {
     while i < bytes.len() {
         if bytes[i] == b'[' || (bytes[i] == b'!' && bytes.get(i + 1) == Some(&b'[')) {
             let label_start = if bytes[i] == b'!' { i + 1 } else { i };
-            if let Some(rel) = text[label_start..].find(']') {
+            if let Some(rel) = memchr::memchr(b']', &text.as_bytes()[label_start..]) {
                 let after = label_start + rel + 1;
                 if text[after..].starts_with('(') {
                     let rest = &text[after + 1..];
@@ -328,7 +331,7 @@ pub fn remove_urls_from_text(text: &str) -> String {
     while i < result.len() {
         let ch = result[i..].chars().next().expect("char at boundary");
         if ch == '<' {
-            if let Some(rel) = result[i..].find('>') {
+            if let Some(rel) = memchr::memchr(b'>', &result.as_bytes()[i..]) {
                 no_html.push(' ');
                 i += rel + 1;
                 continue;

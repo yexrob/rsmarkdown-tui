@@ -1615,6 +1615,7 @@ name = "rsmarkdown-core"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "memchr",
  "pulldown-cmark",
 ]
 

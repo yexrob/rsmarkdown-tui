@@ -170,7 +170,7 @@ pub fn parse_markdown_into_blocks(markdown: &str) -> Vec<String> {
         if !html_stack.is_empty() {
             merged[merged_len - 1].push('\n');
             merged[merged_len - 1].push_str(current);
-            if let Some(closing) = current.find("</") {
+            if let Some(closing) = memchr::memmem::find(current.as_bytes(), b"</") {
                 if let Some(rest) = current[closing + 2..].split_whitespace().next() {
                     let tag = rest.trim_end_matches(['>', '/', '\n']).to_string();
                     if let Some(top) = html_stack.last() {
