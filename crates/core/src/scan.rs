@@ -214,11 +214,23 @@ fn is_word_char(c: char) -> bool {
 }
 
 fn is_word_char_at(content: &str, index: usize) -> bool {
-    content[index..].chars().next().is_some_and(is_word_char)
+    // 调用方可能给非边界（marker 前一字节跨多字节字符）：向后对齐到字符边界。
+    let mut i = index;
+    while i < content.len() && !content.is_char_boundary(i) {
+        i += 1;
+    }
+    content
+        .get(i..)
+        .and_then(|s| s.chars().next())
+        .is_some_and(is_word_char)
 }
 
 pub fn is_underscore_inside_word(content: &str, start: usize, len: usize) -> bool {
-    start > 0 && is_word_char_at(content, start - 1) && is_word_char_at(content, start + len)
+    // start 是 marker 的字节偏移（边界）；前一个字符从边界往前取整字符，
+    // 避免 start - 1 落在多字节字符中间（曾导致 char boundary panic）。
+    let prev = content.get(..start).and_then(|s| s.chars().next_back());
+    let next = content.get(start + len..).and_then(|s| s.chars().next());
+    prev.is_some_and(is_word_char) && next.is_some_and(is_word_char)
 }
 
 pub fn should_ignore_underscore_marker(content: &str, start: usize, len: usize) -> bool {
@@ -469,6 +481,26 @@ mod tests {
         assert_eq!(ranges, vec![(0, 14)]);
         assert!(is_position_in_ranges(5, &ranges));
         assert!(!is_position_in_ranges(20, &ranges));
+    }
+
+    #[test]
+    fn underscore_after_multibyte_char_is_safe() {
+        // 回归：`` `x`，_y_ `` 曾因 start-1 落在 '，'（3 字节）中间 panic。
+        let content = "`x`，_y_";
+        let code = find_closed_code_block_ranges(content);
+        let inline = find_inline_code_ranges(content, &code);
+        let masked = mask_inline_code_markdown_markers(content, &inline);
+        let star_pos = masked.find('_').unwrap();
+        assert!(!should_ignore_underscore_marker(content, star_pos, 1));
+    }
+
+    #[test]
+    fn underscore_inside_cjk_word_boundaries() {
+        // 中文相邻 `_x_` 处理不 panic（多字节边界安全）。
+        let content = "中文_x_结尾";
+        let star_pos = content.find('_').unwrap();
+        let _ = should_ignore_underscore_marker(content, star_pos, 1);
+        assert!(content.is_char_boundary(star_pos + 1));
     }
 
     #[test]
